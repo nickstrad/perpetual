@@ -17,7 +17,8 @@ Astra owns testing; the lead validates results, maintains the plan, and commits 
 
 No simulator, PostgreSQL integration, or project-specific test targets exist yet.
 The repository contains a boot prototype, not the planned three-binary platform.
-Consult the [slice tracker](../../plans/mvp/breakdown/STATE.md) before relying on this implementation status later.
+Slice status on 2026-09-20: seven slices planned at mid-level; none implemented or accepted.
+Update this status whenever a slice's implementation or acceptance changes.
 Seven vertical slices pair useful platform behavior with incremental simulator development.
 Each slice includes a cumulative diagram and questions for later refinement.
 Each slice plan lists its actors and walks through their planned workflows.
@@ -31,7 +32,7 @@ The breakdown controls implementation order; v1.5 remains a detailed reference.
 | [GUIDANCE.md](../../GUIDANCE.md) | Understandability, maintainability, and engineering priorities |
 | [CLAUDE.md](../../CLAUDE.md) | Shared agent instructions; root AGENTS.md links here |
 | [MVP breakdown](../../plans/mvp/breakdown/README.md) | Active sequence, seven plans, paired cumulative diagrams, and iteration rules |
-| [Slice state](../../plans/mvp/breakdown/STATE.md) | Current implementation status and append-only evidence |
+| `.state/` (untracked) | One append-only activity file per set of agent work; cleaned up after its knowledge is saved; see [CLAUDE.md](../../CLAUDE.md#working-state) |
 | [Target architecture](../../plans/1-mvp/v1.5_architecture.md) | Full-platform responsibilities, connections, and major concerns |
 | [Detailed reference](../../plans/1-mvp/v1.5.md) | Earlier contracts, suggested implementation details, and historical planning tracker |
 | [TESTING.md](../../TESTING.md) | Testing strategy, command status, and acceptance evidence |

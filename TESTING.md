@@ -3,7 +3,7 @@
 Tests establish observable behavior and expose failures before users encounter them.
 This living guide defines the strategy and records its current limits.
 The [MVP breakdown](plans/mvp/breakdown/README.md) pairs features with simulator development.
-Its [state tracker](plans/mvp/breakdown/STATE.md) records delivery and acceptance evidence.
+[Project direction](docs/knowledge/project-direction.md) records delivered slices; this guide records test evidence.
 The [architecture](plans/1-mvp/v1.5_architecture.md) defines the intended platform behavior.
 The [simulation research](docs/TEST_RESEARCH.md) defines our focused early harness proposal.
 

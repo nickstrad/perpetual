@@ -13,3 +13,7 @@ go.work.sum
 .idea/
 .vscode/
 .DS_Store
+
+# Per-work state files: append-only activity notes for resuming across context clears and AI tools.
+# Never committed; see "Working state" in CLAUDE.md.
+/.state/

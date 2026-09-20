@@ -1,6 +1,7 @@
 # MVP slices: platform and simulator together
 
-Start here, then read [STATE.md](STATE.md) and the next slice.
+Start here, then read the next unfinished slice.
+The [project direction](../../../docs/knowledge/project-direction.md) entry records which slices are delivered.
 A vertical slice delivers one useful behavior across its required components.
 Each numbered plan pairs platform work with corresponding simulator growth.
 Each matching architecture shows the cumulative target after that slice.
@@ -97,6 +98,7 @@ The `draw-visual` skill explains how; timelines and cut-point maps stay hand-wri
 4. Build platform behavior and simulator coverage together.
 5. Review real evidence, remaining limits, and the next learning step.
 
+Track in-progress work in an untracked `.state/` file; [CLAUDE.md](../../../CLAUDE.md#working-state) explains.
 Keep later slices mid-level until their dependencies become concrete.
 Each slice needs a demonstration, meaningful fault, and repeatable test evidence.
 A failing replay should explain the broken rule, not merely dump internal state.
@@ -108,7 +110,7 @@ Astra owns all testing, simulator development, and [TESTING.md](../../../TESTING
 Astra also handles high-leverage contracts and difficult recovery decisions.
 Sol integrates bounded workflows; Terra implements operating-system and persistence boundaries.
 Luna high handles clear scaffolding and settled documentation tasks.
-The lead reviews, independently validates, updates state, and handles commits.
+The lead reviews, independently validates, records delivered slices, and handles commits.
 Assign exact files and tasks only when expanding the current slice.
 
 Preserve PostgreSQL, one control plane per host, and independent guest execution.

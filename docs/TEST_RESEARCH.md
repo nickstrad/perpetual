@@ -19,7 +19,7 @@ PostgreSQL is the selected state backend; database fixtures remain unimplemented
 The custom simulator remains database-free.
 [TESTING.md](../TESTING.md) defines overall testing ownership, layers, and maintenance.
 The [MVP breakdown](../plans/mvp/breakdown/README.md) pairs platform slices with simulator growth.
-Its [state tracker](../plans/mvp/breakdown/STATE.md) records delivery and acceptance evidence.
+The [project direction](knowledge/project-direction.md) entry records which slices have been delivered.
 Astra owns the harness, scenarios, fixtures, invariant checks, and testing documentation.
 Production owners implement shared decisions and real adapters with Astra's collaboration.
 The lead independently validates results and updates the plan and tracker.

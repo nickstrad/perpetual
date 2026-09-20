@@ -45,7 +45,8 @@ The lead assistant owns final review, validation, plan updates, and commits.
 Only delegate additional testing work when the user's instructions permit reassignment.
 
 Read the [MVP breakdown](plans/mvp/breakdown/README.md) before implementing platform changes.
-Its [state tracker](plans/mvp/breakdown/STATE.md) records progress; assignments alone never imply completion.
+[Project direction](docs/knowledge/project-direction.md) records delivered slices; assignments alone never imply completion.
+Track in-progress work in untracked `.state/` files, as [CLAUDE.md](CLAUDE.md#working-state) describes.
 Expand one slice at a time while keeping later plans mid-level.
 Keep changes scoped, preserve unrelated work, and document material decisions.
 Favor improvements a future reader can understand without reconstructing the entire conversation.

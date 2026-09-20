@@ -7,7 +7,7 @@ Its central principle is understandable, maintainable engineering over clevernes
 Read [TESTING.md](TESTING.md) before designing tests or changing tested behavior.
 Follow [Go TigerStyle](docs/TIGERSTYLE.md) for implementation and invariant handling.
 Read [simulation research](docs/TEST_RESEARCH.md) before changing coordination or simulated boundaries.
-Follow the [MVP breakdown](plans/mvp/breakdown/README.md) and its [state tracker](plans/mvp/breakdown/STATE.md).
+Follow the [MVP breakdown](plans/mvp/breakdown/README.md).
 Expand only the current slice after discussing its boundaries and acceptance evidence.
 Use [v1.5](plans/1-mvp/v1.5.md) for detailed reference, not the active implementation sequence.
 
@@ -16,6 +16,26 @@ Production owners supply behavior contracts and collaborate on necessary testabi
 The lead assistant performs final review, validates evidence, updates plans, and handles commits.
 Keep testing documentation and relevant code changes together in commits.
 Never describe planned checks as implemented or report unexecuted tests as passing.
+
+## Working state
+
+Each set of agent work owns one state file: `.state/<work-slug>.md`.
+Git ignores that folder; state files are never committed.
+A state file lets work resume after context clears or AI tool changes.
+Start it with the goal, scope, and owner of that work.
+Append dated activity while working; never rewrite earlier entries.
+Record decisions, changed behavior, checks actually run, unresolved risks, and the next step.
+Never reuse one file across separate chunks of work; start a fresh file.
+Check `.state/` before starting; never edit or delete another set of work's file.
+
+Finished state files may stay until someone cleans them up.
+A file becomes garbage once its work is committed and nobody must resume it.
+Before deleting one, read it for useful information and save that knowledge first.
+Project findings go into `docs/knowledge/`; plan changes go into the plans.
+Machine and tooling findings go into the VM knowledge store through `kb`.
+Delivered slice status belongs in [project direction](docs/knowledge/project-direction.md), not in a state file.
+
+## Knowledge
 
 Record useful, lasting project knowledge in `docs/knowledge/` for future agents and humans.
 Use a standalone `*.md` file for text-only summaries.

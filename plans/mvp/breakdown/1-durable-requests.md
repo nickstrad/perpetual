@@ -342,7 +342,7 @@ Which trace format can a reader follow without understanding harness internals?
 
 Astra leads contracts and simulation; Terra owns persistence; Sol integrates the request path.
 Luna high can handle settled entrypoints and configuration scaffolding.
-The lead validates the whole demonstration and updates [state](STATE.md).
+The lead validates the whole demonstration and updates [project direction](../../../docs/knowledge/project-direction.md).
 
 Booting machines, guest actions, and randomized schedules wait for later slices.
 Reference scope: old M0/M1, adapted around registration rather than premature command execution.
