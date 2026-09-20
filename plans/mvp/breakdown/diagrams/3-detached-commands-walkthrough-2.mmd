@@ -1,0 +1,21 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as CLI
+  participant P1 as agent-plane
+  participant P2 as PostgreSQL
+  participant P3 as vmagent
+  participant P4 as Command
+  P0->>P1: command X1
+  P1->>P2: reserve slot
+  P1->>P3: dispatch X1
+  Note over P3: journal: accepted
+  P3->>P4: launch child
+  P3-xP1: accepted
+  P1->>P2: X1 uncertain
+  P1->>P0: X1 outcome uncertain
+  P1->>P3: inspect X1
+  P3->>P1: X1 running
+  P1->>P2: X1 running
+  P0->>P1: retry command X1
+  P1->>P0: existing X1: running

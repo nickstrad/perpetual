@@ -1,0 +1,9 @@
+%% draw-visual: -x 4 -y 1 -p 0
+graph TD
+  DR[Scenario script] -->|events| Q[Event queue]
+  Q -->|3| SD[SAME decisions]
+  SD -->|4| AD[Simulated store]
+  AD -->|5| Q
+  DR -->|faults| AD
+  SD -->|state| CH[Invariant checks]
+  CH --> TR[Trace recorder]

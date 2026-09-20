@@ -1,0 +1,24 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as CLI
+  participant P1 as agent-plane
+  participant P2 as PostgreSQL
+  participant P3 as Host files
+  participant P4 as Firecracker
+  participant P5 as vmagent
+  P0->>P1: snapshot a
+  P1->>P2: reserve snapshot
+  P1->>P5: drain: close mutation admission
+  Note over P5: finish running work
+  P5->>P1: drained
+  Note over P1: collect final results
+  P1->>P4: pause, capture memory + devices
+  P4->>P3: artifacts
+  P1->>P3: copy matching disk to staging
+  P1->>P3: publish complete snapshot
+  P1->>P2: s1 published
+  P1->>P4: terminate machine
+  P4->>P1: exit confirmed
+  P1->>P2: a stopped
+  P1->>P0: s1 done

@@ -1,0 +1,19 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as CLI
+  participant P1 as agent-plane
+  participant P2 as vmagent
+  participant P3 as Command
+  P1->>P2: upgrade: attach X1
+  P2->>P1: upgrade rejected
+  Note over P1: automatic mode: fall back
+  P1->>P2: poll after cursor 0
+  P2->>P1: 1..3
+  Note over P0,P3: same rejection, explicit streaming mode
+  P1->>P2: upgrade: attach X1
+  P2->>P1: upgrade rejected
+  Note over P1: no silent polling
+  P0->>P1: inspect X1
+  P1->>P0: running, transport error
+  Note over P3: never restarted or cancelled

@@ -1,0 +1,21 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Chooser
+  participant P1 as Queue
+  participant P2 as Decisions
+  participant P3 as Sim guest
+  participant P4 as Checks+trace
+  Note over P1: pending: exit, cancel, ack 2
+  P0->>P1: seed 42: cancel
+  P1->>P2: deliver cancel
+  P2->>P3: effect: kill group
+  P0->>P1: next: exit 0
+  P1->>P2: deliver exit 0
+  Note over P2: keep the one recorded outcome
+  P0->>P3: fault: lose ack 2
+  P1->>P2: deliver timeout
+  Note over P2: input 2 uncertain, no resend
+  P2->>P4: state + effects
+  Note over P4: one outcome? slot held?
+  Note over P4: trace: seed + every choice

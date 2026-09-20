@@ -1,0 +1,26 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Terminal
+  participant P1 as CLI
+  participant P2 as agent-plane
+  participant P3 as PostgreSQL
+  participant P4 as Firecracker
+  participant P5 as VM a
+  P0->>P1: start a
+  P1->>P2: start a
+  P2->>P3: reserve, B1
+  P2->>P1: accepted
+  Note over P2: prepare disk and network
+  P2->>P4: launch detached process
+  P2->>P3: record owner
+  P4->>P5: boot guest
+  Note over P5: init starts services
+  P2->>P5: health?
+  P5->>P2: healthy, boot B1
+  P2->>P3: a ready
+  P0->>P1: ssh a
+  P1->>P2: SSH details?
+  P2->>P1: address
+  Note over P1: launch local SSH client
+  P0->>P5: SSH session, agent-plane relays nothing

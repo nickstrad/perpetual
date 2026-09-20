@@ -1,0 +1,27 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Chooser
+  participant P1 as Queue
+  participant P2 as Decisions
+  participant P3 as Sim world
+  participant P4 as Checks+trace
+  P0->>P1: snapshot a
+  P1->>P2: deliver snapshot
+  P2->>P3: effect: drain
+  P0->>P1: race: write W9
+  P1->>P2: deliver W9
+  Note over P2: reject: admission closed
+  P3->>P1: completion: drained
+  P1->>P2: deliver drained
+  P2->>P3: effect: capture
+  P3->>P1: completion: captured
+  P1->>P2: deliver captured
+  P2->>P3: effect: publish
+  P0->>P3: fault: publish fails midway
+  Note over P3: status: incomplete
+  P0->>P1: restore from s1
+  P1->>P2: deliver restore
+  Note over P2: reject: s1 incomplete
+  P2->>P4: state + effects
+  Note over P4: incomplete never restorable?

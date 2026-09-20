@@ -1,0 +1,21 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as CLI
+  participant P1 as agent-plane
+  participant P2 as PostgreSQL
+  participant P3 as vmagent
+  participant P4 as Command
+  P1-xP2: cursor = 3
+  Note over P0,P4: PostgreSQL restarts, that commit outcome is unknown
+  P4->>P3: 4..6
+  P0->>P1: write W2
+  P1->>P0: unavailable
+  Note over P1: no durable mutation without the database
+  P1->>P2: reconnect, bounded
+  P1->>P2: cursor = 3 committed?
+  P2->>P1: yes
+  Note over P1: reconcile, then reopen admission
+  P1->>P3: poll after cursor 3
+  P3->>P1: 4..6
+  P1->>P2: cursor = 6

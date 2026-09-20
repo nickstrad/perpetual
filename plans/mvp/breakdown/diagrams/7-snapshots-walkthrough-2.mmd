@@ -1,0 +1,21 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as CLI
+  participant P1 as agent-plane
+  participant P2 as PostgreSQL
+  participant P3 as Host files
+  participant P4 as Firecracker
+  participant P5 as vmagent
+  P0->>P1: restore a
+  P1->>P2: a stopped?
+  P1->>P2: reserve, B2
+  P1->>P3: restore disk from s1
+  P1->>P4: start from saved memory + devices
+  P1->>P5: bootstrap: you are boot B2
+  P5->>P1: ready as B2
+  P1->>P2: a ready
+  Note over P1: reopen admission
+  P5->>P1: delayed report tagged B1
+  Note over P1: reject: B1 is not current
+  P1->>P0: a restored

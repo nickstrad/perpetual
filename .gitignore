@@ -1,0 +1,15 @@
+# Go build artifacts and coverage reports
+/agent-handler
+/bin/
+*.test
+*.out
+coverage.*
+
+# Local Go workspace configuration
+go.work
+go.work.sum
+
+# Local editor and operating-system files
+.idea/
+.vscode/
+.DS_Store

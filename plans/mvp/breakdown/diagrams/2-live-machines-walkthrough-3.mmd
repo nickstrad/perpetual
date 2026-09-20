@@ -1,0 +1,20 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as agent-plane
+  participant P1 as PostgreSQL
+  participant P2 as Firecracker
+  participant P3 as VM a
+  P0->>P1: reserve, B1
+  P0->>P2: launch detached process
+  Note over P0,P3: agent-plane crashes before recording the owner
+  P2->>P3: boot continues
+  Note over P0,P3: agent-plane restarts
+  P0->>P1: read unfinished operations
+  P1->>P0: start a, B1, owner unknown
+  P0->>P2: inspect process evidence
+  P2->>P0: process for B1 alive
+  P0->>P1: record owner
+  P0->>P3: health?
+  P3->>P0: healthy, boot B1
+  P0->>P1: a ready

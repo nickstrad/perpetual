@@ -1,0 +1,15 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as agent-plane
+  participant P1 as PostgreSQL
+  participant P2 as vmagent
+  participant P3 as Command
+  P2->>P3: launch X1
+  Note over P0,P3: vmagent restarts as guest process G2
+  Note over P2: journal: X1 unfinished
+  P0->>P2: inspect X1
+  P2->>P0: G2: X1 uncertain, not rerun
+  P0->>P1: X1 uncertain, slot kept
+  P2->>P0: delayed report tagged old boot B0
+  Note over P0: reject: B0 is not current

@@ -1,0 +1,24 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Chooser
+  participant P1 as Queue
+  participant P2 as Decisions
+  participant P3 as Sim transport
+  participant P4 as Checks+trace
+  P2->>P3: effect: attach stream
+  P3->>P1: delivery: 1..2 streamed
+  P1->>P2: deliver 1..2
+  P0->>P3: fault: duplicate 2
+  P3->>P1: delivery: 2 again
+  P1->>P2: deliver 2
+  Note over P2: ignore duplicate, cursor stays 2
+  P0->>P3: fault: drop connection
+  P2->>P3: effect: poll after 2
+  P3->>P1: delivery: 3..5 polled
+  P1->>P2: deliver 3..5
+  P0->>P3: fault: delay final status
+  P3->>P1: delivery: final, late
+  P1->>P2: deliver final
+  P2->>P4: state + effects
+  Note over P4: same outcome as polling only?

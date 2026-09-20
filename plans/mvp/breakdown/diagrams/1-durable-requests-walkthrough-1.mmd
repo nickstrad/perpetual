@@ -1,0 +1,25 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Terminal
+  participant P1 as CLI
+  participant P2 as agent-plane
+  participant P3 as Decisions
+  participant P4 as PostgreSQL
+  P0->>P1: register a
+  Note over P1: choose request id R1
+  P1->>P2: register R1, P
+  P2->>P3: event: register R1
+  P3->>P2: effect: reserve
+  P2->>P4: transaction: reserve R1
+  P4->>P2: committed
+  P2->>P3: event: committed
+  P3->>P2: reply: registered
+  P2->>P1: record: registered
+  P1->>P0: print record
+  P0->>P1: inspect a
+  P1->>P2: inspect a
+  P2->>P4: read record
+  P4->>P2: intent only, no machine
+  P2->>P1: same record
+  P1->>P0: print record

@@ -1,0 +1,25 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as CLI
+  participant P1 as agent-plane
+  participant P2 as PostgreSQL
+  participant P3 as vmagent
+  participant P4 as Command
+  P0->>P1: input 1 for X1
+  P1->>P3: input 1
+  P3->>P4: stdin bytes
+  P3->>P1: ack 1
+  P1->>P0: 1 delivered
+  P0->>P1: input 2
+  P1->>P3: input 2
+  P3->>P4: stdin bytes
+  P3-xP1: ack 2
+  P1->>P2: 2 uncertain
+  P1->>P0: 2 uncertain
+  Note over P1: never resend automatically
+  P0->>P1: end of input
+  P1->>P3: close input
+  P3->>P4: close stdin
+  P3->>P1: input closed
+  P1->>P0: input closed

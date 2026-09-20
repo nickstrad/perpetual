@@ -1,0 +1,24 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Chooser
+  participant P1 as Queue + clock
+  participant P2 as Decisions
+  participant P3 as Sim world
+  participant P4 as Checks+trace
+  P0->>P3: fault: a unreachable
+  P0->>P1: exec Y1 on b
+  P1->>P2: deliver Y1
+  P2->>P3: effect: dispatch
+  Note over P4: bound: Y1 done by t60
+  Note over P0,P4: chosen fault: agent-plane crashes, store and guests persist
+  Note over P2: rebuild from durable state
+  P2->>P3: effect: inspect a, b
+  P3->>P1: completion: Y1 running
+  Note over P3: a: nothing arrives
+  P0->>P1: fair pick: b
+  P3->>P1: completion: Y1 exit 0
+  P1->>P2: deliver exit 0
+  P2->>P4: state + effects, every step
+  P1->>P4: clock reaches t60
+  Note over P4: Y1 done? else list pending

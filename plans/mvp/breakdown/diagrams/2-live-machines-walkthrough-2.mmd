@@ -1,0 +1,23 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Terminal
+  participant P1 as CLI
+  participant P2 as agent-plane
+  participant P3 as PostgreSQL
+  participant P4 as Firecracker a
+  participant P5 as VM b
+  P0->>P1: stop a
+  P1->>P2: stop a
+  P2->>P3: reserve stop
+  P2->>P4: terminate verified process
+  P4->>P2: exit confirmed
+  P2->>P3: a stopped
+  P0->>P1: delete a
+  P1->>P2: delete a
+  P2->>P3: a stopped?
+  Note over P2: remove only a's verified files
+  P2->>P3: a deleted
+  P2->>P5: health?
+  P5->>P2: healthy, untouched
+  P0->>P5: SSH session to b continues throughout

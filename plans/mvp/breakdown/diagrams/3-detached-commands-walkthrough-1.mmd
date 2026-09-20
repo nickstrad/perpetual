@@ -1,0 +1,35 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Terminal
+  participant P1 as CLI
+  participant P2 as agent-plane
+  participant P3 as PostgreSQL
+  participant P4 as vmagent
+  participant P5 as Command
+  P0->>P1: exec on a
+  Note over P1: choose action id X1
+  P1->>P2: command X1
+  P2->>P3: reserve slot
+  P2->>P4: dispatch X1
+  Note over P4: journal: accepted
+  P4->>P5: launch
+  P4->>P2: accepted
+  P2->>P1: X1 accepted
+  P1->>P0: print X1
+  Note over P0,P5: terminal disconnects, the command keeps running
+  P5->>P4: 1..3
+  P2->>P4: poll after cursor 0
+  P4->>P2: output 1..3
+  Note over P2: save host output file
+  P2->>P3: cursor = 3
+  P5->>P4: exit 0
+  Note over P4: journal: outcome
+  P2->>P4: poll after cursor 3
+  P4->>P2: final status: exit 0
+  P2->>P3: free slot
+  Note over P0,P5: later, from any terminal
+  P0->>P1: --watch a
+  P1->>P2: watch X1
+  P2->>P1: output, exit
+  P1->>P0: output

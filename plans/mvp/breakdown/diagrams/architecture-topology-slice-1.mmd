@@ -1,0 +1,5 @@
+%% draw-visual: -x 4 -y 1 -p 0
+graph LR
+  T[Terminal] -->|1| CLI[perpetual CLI]
+  CLI -->|2| AP[agent-plane]
+  AP -->|6| PG[PostgreSQL]

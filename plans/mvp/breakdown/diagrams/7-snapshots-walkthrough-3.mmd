@@ -1,0 +1,20 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as agent-plane
+  participant P1 as PostgreSQL
+  participant P2 as Host files
+  participant P3 as Firecracker
+  P0->>P3: pause, capture memory + devices
+  P3->>P2: artifacts
+  Note over P0,P3: agent-plane crashes before publishing
+  Note over P0,P3: agent-plane restarts
+  P0->>P1: read unfinished
+  P1->>P0: s1 unpublished
+  P0->>P2: inspect staging
+  P2->>P0: incomplete set
+  P0->>P1: s1 failed
+  Note over P0: s1 can never be restored
+  P0->>P3: inspect paused machine
+  P3->>P0: process alive, paused
+  Note over P0: ownership and cleanup stay recorded

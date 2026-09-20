@@ -1,0 +1,24 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as CLI
+  participant P1 as agent-plane
+  participant P2 as PostgreSQL
+  participant P3 as vmagent
+  participant P4 as Command
+  P0->>P1: command X1
+  P1->>P3: dispatch X1
+  P3->>P4: launch
+  P1->>P3: upgrade: attach X1 after 0
+  P3->>P1: upgrade accepted
+  P4->>P3: 1..3
+  P3->>P1: stream 1..3
+  Note over P1: save host output
+  P1->>P2: cursor = 3
+  Note over P0,P4: stream drops, X1 keeps running
+  P4->>P3: 4..5
+  P1->>P3: poll after cursor 3
+  P3->>P1: 4..5
+  P1->>P2: cursor = 5
+  P0->>P1: watch X1
+  P1->>P0: 1..5 in order

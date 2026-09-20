@@ -1,0 +1,20 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as agent-plane
+  participant P1 as PostgreSQL
+  participant P2 as vmagent
+  participant P3 as Command
+  Note over P0,P3: agent-plane stops, collection pauses at cursor 3
+  P3->>P2: output 4..9
+  P3->>P2: exit 0
+  Note over P2: retention drops 4..5
+  Note over P0,P3: agent-plane restarts
+  P0->>P1: read active actions
+  P1->>P0: X1 running, cursor 3
+  P0->>P2: inspect X1
+  P2->>P0: X1 finished: exit 0
+  P0->>P2: poll after cursor 3
+  P2->>P0: gap 4..5, output 6..9
+  Note over P0: save output, record gap
+  P0->>P1: cursor = 9, X1 succeeded

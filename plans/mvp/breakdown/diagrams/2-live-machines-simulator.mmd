@@ -1,0 +1,27 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Script
+  participant P1 as Queue + clock
+  participant P2 as Decisions
+  participant P3 as Sim host
+  participant P4 as Checks+trace
+  P0->>P1: start a
+  P1->>P2: deliver start
+  P2->>P3: effect: launch B1
+  P2->>P1: deadline t30
+  Note over P0,P4: scripted crash: memory discarded
+  Note over P3: launch finishes anyway
+  Note over P0,P4: scripted restart: rebuild from committed records
+  P2->>P3: effect: inspect
+  P3->>P1: completion: B1 alive
+  P1->>P2: deliver alive
+  Note over P2: adopt process, no relaunch
+  P0->>P3: fault: delay health
+  P0->>P1: clock to t30
+  P1->>P2: deliver t30
+  Note over P2: report late boot, keep ownership
+  P3->>P1: completion: healthy B1
+  P1->>P2: deliver health
+  P2->>P4: state + effects
+  Note over P4: one launch? distinct allocations?

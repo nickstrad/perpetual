@@ -1,0 +1,30 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Terminal
+  participant P1 as CLI
+  participant P2 as agent-plane
+  participant P3 as Decisions
+  participant P4 as PostgreSQL
+  P0->>P1: register a
+  P1->>P2: register R1, P
+  P2->>P4: transaction: reserve R1
+  P4->>P2: committed
+  P2-xP1: registered
+  P1->>P0: no reply
+  P0->>P1: retry R1
+  P1->>P2: register R1, P
+  P2->>P4: look up R1
+  P4->>P2: found, P matches
+  P2->>P1: same record
+  Note over P0,P4: agent-plane restarts: memory lost, records remain
+  P0->>P1: inspect a
+  P1->>P2: inspect a
+  P2->>P4: read record
+  P4->>P2: committed record
+  P2->>P1: same record
+  P0->>P1: reuse R1, P2
+  P1->>P2: register R1, P2
+  P2->>P3: event: R1, P2
+  P3->>P2: reply: conflict
+  P2->>P1: conflict

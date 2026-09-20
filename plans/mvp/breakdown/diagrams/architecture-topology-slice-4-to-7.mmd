@@ -1,0 +1,11 @@
+%% draw-visual: -x 4 -y 1 -p 0
+graph LR
+  T[Terminal] -->|1| CLI[perpetual CLI]
+  CLI -->|2| AP[agent-plane]
+  AP -->|9| VA[vmagent]
+  VA -->|launches| CMD[Command]
+  AP -->|8| FC[Firecracker]
+  FC -->|runs VM| VA
+  AP -->|7| HF[host files + network]
+  AP -->|6| PG[PostgreSQL]
+  T -->|10| SSH[guest SSH server]

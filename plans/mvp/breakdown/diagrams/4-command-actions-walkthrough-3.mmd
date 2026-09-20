@@ -1,0 +1,24 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as CLI
+  participant P1 as agent-plane
+  participant P2 as PostgreSQL
+  participant P3 as vmagent
+  participant P4 as Command
+  P0->>P1: cancel X1
+  P4->>P3: exit 0
+  Note over P3: journal: exit 0
+  P1->>P3: cancel X1
+  P3->>P1: already finished: exit 0
+  P1->>P2: X1 succeeded
+  P1->>P0: outcome: exit 0
+  Note over P0,P4: other order: the cancel arrives first
+  P0->>P1: cancel X1
+  P1->>P3: cancel X1
+  P3->>P4: kill group
+  P4->>P3: group gone
+  Note over P3: journal: cancelled
+  P3->>P1: cancelled, verified
+  P1->>P2: X1 cancelled
+  P1->>P0: outcome: cancelled

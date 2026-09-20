@@ -1,0 +1,30 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Terminal
+  participant P1 as CLI
+  participant P2 as agent-plane
+  participant P3 as PostgreSQL
+  participant P4 as vmagent
+  participant P5 as Command
+  P0->>P1: write file
+  P1->>P2: write W1
+  P2->>P3: save W1
+  P2->>P4: write W1, bounded
+  Note over P4: stage, publish, journal
+  P4->>P2: W1 done
+  P2->>P3: W1 done
+  P2->>P1: W1 done
+  P0->>P1: exec on a
+  P1->>P2: command X1
+  P2->>P3: reserve slot
+  P2->>P4: dispatch X1
+  P4->>P5: launch
+  Note over P5: use file, write results
+  Note over P0,P5: X1 still runs, file actions stay available
+  P0->>P1: read file
+  P1->>P2: bounded read
+  P2->>P4: read within limit
+  P4->>P2: bounded bytes
+  P2->>P1: bytes
+  P1->>P0: print bytes

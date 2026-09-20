@@ -1,0 +1,32 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Script
+  participant P1 as Event queue
+  participant P2 as Decisions
+  participant P3 as Sim store
+  participant P4 as Checks+trace
+  P0->>P1: register R1, P
+  P1->>P2: deliver register
+  P2->>P3: effect: reserve
+  Note over P3: commit R1
+  P3->>P1: completion: committed
+  P1->>P2: deliver committed
+  P2->>P3: effect: reply
+  P0->>P3: fault: lose that reply
+  P0->>P1: retry R1, P
+  P1->>P2: deliver retry
+  P2->>P3: effect: look up
+  P3->>P1: completion: found, P matches
+  P1->>P2: deliver found
+  Note over P2: decide: same identity
+  Note over P0,P4: scripted restart: memory discarded, committed records kept
+  Note over P2: rebuild from committed records
+  P0->>P1: inspect a
+  P1->>P2: deliver inspect
+  P0->>P1: register R1, P2
+  P1->>P2: deliver R1, P2
+  Note over P2: decide: conflict
+  P2->>P4: state + effects
+  Note over P4: one identity? P unchanged?
+  Note over P4: write trace for replay

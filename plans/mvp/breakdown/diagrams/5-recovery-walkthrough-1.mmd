@@ -1,0 +1,22 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as CLI
+  participant P1 as agent-plane
+  participant P2 as PostgreSQL
+  participant P3 as VM a
+  participant P4 as VM b
+  Note over P0,P4: agent-plane restarts, database and guests kept running
+  P1->>P2: read unfinished
+  P2->>P1: a: X1, b: Y1
+  P1-xP3: inspect X1
+  Note over P1: a unreachable: X1 uncertain
+  P1->>P4: identity? inspect Y1
+  P4->>P1: same boot, Y1 running
+  P1->>P2: b reconciled
+  Note over P1: reopen admission for b only
+  P0->>P1: inspect a, b
+  P1->>P0: a stale, b ready
+  P1-xP3: bounded retry
+  P1->>P4: poll Y1 output
+  P4->>P1: output, exit 0

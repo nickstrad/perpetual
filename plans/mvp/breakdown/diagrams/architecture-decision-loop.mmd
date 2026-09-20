@@ -1,0 +1,5 @@
+%% draw-visual: -x 4 -y 1 -p 0
+graph TD
+  EV[events] -->|3| SD[shared decisions]
+  SD -->|4 effects| RA[real adapters]
+  RA -->|5 completions| EV

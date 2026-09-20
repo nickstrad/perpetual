@@ -1,0 +1,28 @@
+%% draw-visual:
+sequenceDiagram
+  autonumber
+  participant P0 as Script
+  participant P1 as Queue
+  participant P2 as Host decide
+  participant P3 as Guest decide
+  participant P4 as Adapters
+  participant P5 as Checks
+  P0->>P1: exec X1
+  P1->>P2: deliver X1
+  P2->>P4: effect: reserve slot
+  P2->>P4: effect: dispatch X1
+  P4->>P1: guest event: X1 arrives
+  P1->>P3: deliver X1 arrives
+  P3->>P4: journal+run
+  P0->>P4: fault: lose the acceptance reply
+  Note over P0,P5: scripted outage: control plane unavailable
+  P4->>P1: guest event: output, then exit 0
+  P1->>P3: deliver exit 0
+  P3->>P4: journal exit
+  Note over P0,P5: scripted restart: rebuild from committed records
+  Note over P2: X1 uncertain, slot kept
+  P2->>P4: effect: inspect X1
+  P4->>P1: completion: X1 finished
+  P1->>P2: deliver done
+  P2->>P5: state + effects
+  Note over P5: one execution? honest cursor?
