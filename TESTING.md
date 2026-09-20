@@ -9,8 +9,8 @@ The [simulation research](docs/TEST_RESEARCH.md) defines our focused early harne
 
 ## Current status
 
-Repository inspection on 2026-09-18 found only the existing boot prototype.
-`main.go` and its dependencies do not implement the planned platform.
+The earlier boot prototype was removed on 2026-09-20; no Go code exists.
+Implementation starts from scratch, following the MVP breakdown.
 No test files, Makefile targets, validation scripts, or CI workflow exist yet.
 The selected early simulation approach also remains unimplemented.
 PostgreSQL is the selected state backend; its testing fixtures remain unimplemented.
@@ -293,8 +293,7 @@ See [TEST_RESEARCH.md](docs/TEST_RESEARCH.md) for boundaries, crash semantics, a
 ## Commands and delivery
 
 No project-specific test command is currently implemented or verified.
-Ordinary Go commands can inspect the prototype when its toolchain resolves.
-Without test files, successful package testing supplies no planned-platform behavior evidence.
+No Go module exists yet, so ordinary Go commands have nothing to check.
 The following commands are planned interfaces, not runnable instructions today.
 
 | Planned command | Purpose |

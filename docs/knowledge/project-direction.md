@@ -16,7 +16,9 @@ The simulator requires no database; real integration tests require isolated Post
 Astra owns testing; the lead validates results, maintains the plan, and commits changes.
 
 No simulator, PostgreSQL integration, or project-specific test targets exist yet.
-The repository contains a boot prototype, not the planned three-binary platform.
+The repository contains documentation and tooling only; no Go code exists yet.
+The earlier Firecracker SDK boot prototype was removed on 2026-09-20, uncommitted.
+Implementation starts from scratch, following the breakdown.
 Slice status on 2026-09-20: seven slices planned at mid-level; none implemented or accepted.
 Update this status whenever a slice's implementation or acceptance changes.
 Seven vertical slices pair useful platform behavior with incremental simulator development.

@@ -1,7 +1,7 @@
 # 1. Durable requests and the first simulator
 
 Read the [roadmap](README.md) and [cumulative architecture](1-durable-requests_architecture.md).
-Starting point: the existing boot prototype; no platform components exist yet.
+Starting point: an empty codebase; no Go module or platform component exists yet.
 
 ## Actors and actions
 
@@ -200,7 +200,6 @@ Reusing R1 with different parameters fails rather than overwriting intent.
 - Establish bounded connections, transactions, migrations, and single-host service ownership.
 - Recover recorded requests after restarting the control plane.
 
-Keep the prototype untouched until the replacement boot path proves itself.
 Expose registration and inspection only; do not publish pretend command execution.
 
 ## Simulator work
