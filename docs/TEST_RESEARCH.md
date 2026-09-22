@@ -17,7 +17,7 @@ This document records research and proposed implementation boundaries on 2026-09
 No coordinator, simulator, test target, or CI implementation exists yet.
 PostgreSQL is the selected state backend; database fixtures remain unimplemented.
 The custom simulator remains database-free.
-[TESTING.md](../TESTING.md) defines overall testing ownership, layers, and maintenance.
+[TESTING.md](../TESTING.md) defines MC/DC coverage, simulation requirements, real-effect validation, and maintenance.
 The [MVP breakdown](../plans/mvp/breakdown/README.md) pairs platform slices with simulator growth.
 The [project direction](knowledge/project-direction.md) entry records which slices have been delivered.
 Astra owns the harness, scenarios, fixtures, invariant checks, and testing documentation.
@@ -43,6 +43,7 @@ Apply that distinction to independent machines and recovery paths.
 See [Simulation Testing For Liveness](https://tigerbeetle.com/blog/2023-07-06-simulation-testing-for-liveness/).
 
 SQLite combines injected failures, crash checks, regression cases, and coverage analysis.
+Its MC/DC discussion motivates requiring evidence that each condition independently affects a decision, alongside behavior and failure tests.
 Those techniques remain necessary around our real storage boundaries.
 Simulation supplements them. See [SQLite testing](https://www.sqlite.org/testing.html).
 SQLite supplies testing inspiration only; it is not the selected backend.

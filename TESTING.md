@@ -1,344 +1,217 @@
 # Testing perpetual
 
-Tests establish observable behavior and expose failures before users encounter them.
-This living guide defines the strategy and records its current limits.
-The [MVP breakdown](plans/mvp/breakdown/README.md) pairs features with simulator development.
-[Project direction](docs/knowledge/project-direction.md) records delivered slices; this guide records test evidence.
-The [architecture](plans/1-mvp/v1.5_architecture.md) defines the intended platform behavior.
-The [simulation research](docs/TEST_RESEARCH.md) defines our focused early harness proposal.
+Build two complementary forms of tests: basic behavior tests with MC/DC coverage and targeted fuzzing, and deterministic simulation of coordination and recovery.
+Validate external effects against real components as part of that work.
+Use the [MVP breakdown](plans/mvp/breakdown/README.md) to grow tests with each production slice.
 
-## Current status
+As of 2026-09-22, no Go implementation, simulator, or project test commands exist.
+The requirements below describe work to implement, not passing checks.
+Record delivered slices in [project direction](docs/knowledge/project-direction.md).
+The [simulation research](docs/TEST_RESEARCH.md) records influences, alternatives, and detailed modeling assumptions.
 
-The earlier boot prototype was removed on 2026-09-20; no Go code exists.
-Implementation starts from scratch, following the MVP breakdown.
-No test files, Makefile targets, validation scripts, or CI workflow exist yet.
-The selected early simulation approach also remains unimplemented.
-PostgreSQL is the selected state backend; its testing fixtures remain unimplemented.
-CI means continuous integration: automated checks executed after repository changes.
-This document establishes direction; it does not establish passing tests.
-No runtime checks were executed for this documentation change.
-Everything below describes planned work unless explicitly marked implemented.
+## Build business logic from pure functions
 
-## Ownership
+Follow [Go TigerStyle](docs/TIGERSTYLE.md) when making code testable:
 
-Astra owns test design, implementation, fixtures, validation scripts, CI, and this guide.
-A fixture supplies controlled data or resources needed by a test.
-Production workers own application changes and necessary refactors within assigned scopes.
-A refactor changes code structure while preserving intended behavior.
-Astra identifies testing obstacles and agrees boundary changes with production owners.
-Production workers provide behavior contracts, failure boundaries, and reproduction details.
-Astra implements the corresponding checks and reports observed results.
-The lead reviews integration and independently performs final validation.
-The lead alone updates the shared plan, tracker, and acceptance status.
-Coordinate shared files before editing; keep independent work in separate files.
-These development roles introduce no named assistant products into guest images.
+- Compose business rules from small, named pure functions. A pure function returns the same result for the same inputs and has no externally visible side effects. Keep inputs unchanged, including data shared through slices, maps, and pointers.
+- Pass state, observations, time, identifiers, and random choices explicitly. Return the next state and requested effects; perform database, filesystem, network, and process operations in adapters outside the decision code.
+- Keep orchestration readable. Separate validation, decisions, and effect execution without fragmenting a clear operation into trivial helpers or building a generic framework.
+- Give mutable state and resources clear owners. Serialize decisions where required; let external work report completion through explicit events. A requested write is not a committed write.
+- Bound work, queues, buffers, output, and retries. Make units, deadlines, overflow checks, and uncertain outcomes explicit.
+- Keep meaningful invariant checks enabled in production. Check relationships such as exclusive reservations and output cursors never exceeding durable output, at the boundaries where they must hold.
 
-## Terms and priorities
+An invariant failure indicates a programming defect and must stop the affected service.
+Invalid input, unavailable guests, and I/O failures are expected errors with explicit recovery paths.
+Test both categories; do not turn operating errors into assertion failures.
+Verify fatal invariant handling through subprocess tests, including HTTP handlers whose panics Go would otherwise recover.
+Avoid assertion quotas and arbitrary function-size limits; each check and helper must explain a real rule.
 
-A behavior test checks externally meaningful results from a specific scenario.
-An invariant is a rule that must remain true throughout execution.
-A safety check verifies that forbidden behavior never occurs during the test.
-A liveness check verifies progress under stated operating conditions.
-A bounded-progress check requires progress within an explicit time or step limit.
-A regression test reproduces a defect and detects its return.
-Fault injection deliberately fails a selected operation to examine recovery.
+## 1. Basic testing: behavior and MC/DC coverage
 
-Start with important behaviors, their invariants, and their likely failure boundaries.
-Prefer actual files, disposable PostgreSQL databases, local servers, and helper subprocesses.
-Replace privileged effects and selected failures through small, explicit boundaries.
-Assert persisted records, output, process effects, and returned outcomes.
-Avoid assertions that merely mirror private functions or incidental call order.
-Add infrastructure when a concrete test requires it.
-Keep fixtures smaller than the behavior they help explain.
+Use Modified Condition/Decision Coverage (MC/DC) as the coverage standard for handwritten production Go decisions.
+Cover every feasible decision and condition in that scope; track any remaining gaps explicitly.
+Cover validation, admission, identity checks, state transitions, recovery rules, and decisions inside effect adapters.
+Start with ordinary table-driven Go tests and explicit expected outcomes.
+Test pure functions directly, then test their composition through the production entrypoints that use them.
 
-### Source lessons
+For each decision:
 
-SQLite combines ordinary checks, injected failures, crash testing, and regression cases.
-Its coverage discussion distinguishes executed statements from independently tested conditions.
-Adopt those complementary perspectives proportionately. See [SQLite testing](https://www.sqlite.org/testing.html).
-SQLite provides testing inspiration only; PostgreSQL stores platform state.
+1. Identify its Boolean conditions and exercise both decision outcomes.
+2. Exercise each condition as both true and false. Include every reachable function entry and exit, including error returns.
+3. Show a pair of cases where changing one condition changes the decision while the other condition values stay fixed. Label the pair in the test table or nearby comments.
+4. Assert the required result, next state, and requested effects. Check that rejected requests produce no prohibited effects.
 
-TigerBeetle separates safety checks from progress checks under sufficiently healthy conditions.
-Its liveness tests preserve some failures while requiring unaffected components' progress.
-Apply that distinction to independent machines and recovery paths.
-See [Simulation Testing For Liveness](https://tigerbeetle.com/blog/2023-07-06-simulation-testing-for-liveness/).
-
-TigerBeetle also checks internal invariants using production code under controlled external interactions.
-See [Protocol-Aware Deterministic Simulation Testing](https://tigerbeetle.com/blog/2026-08-20-protocol-aware-dst/).
-Dropbox demonstrates focused planning tests sharing production decision logic.
-See [Testing sync at Dropbox](https://dropbox.tech/infrastructure/-testing-our-new-sync-engine).
-Our [research proposal](docs/TEST_RESEARCH.md) applies these ideas to early coordinator testing.
-
-These sources inspire our choices; they do not establish perpetual's correctness.
-We do not inherit their coverage results or simulation infrastructure.
-
-## Checks that matter
-
-An action identifier names one requested operation throughout retries and inspection.
-A boot identifier distinguishes separate executions of the same machine.
-A journal stores durable guest acceptance and outcome evidence.
-A cursor records the last output sequence collected or delivered.
-
-| Behavior | Safety check | Progress check and conditions |
-| --- | --- | --- |
-| Command retry | Lost acceptance never causes duplicate execution | Recover recorded outcomes once the original guest responds |
-| Concurrent admission | Only one command owns each guest's execution slot | A confirmed terminal outcome eventually releases its slot |
-| Caller detachment | Disconnecting never cancels accepted execution | A healthy collector obtains completion without attached viewers |
-| Control-plane restart | Shutdown leaves guest processes running | Reconciliation resumes collection with reachable guests and writable storage |
-| Independent machines | Cleanup never touches another machine's resources | Healthy machines remain usable while another stays unreachable |
-| Output recovery | Committed cursors never exceed durable output | Replay reaches terminal status, reporting any retention gaps |
-| Guest restart | Unfinished journal entries never trigger blind replay | Inspection reports uncertainty within its configured request deadline |
-| Snapshot publication | Incomplete artifacts never become restorable snapshots | Drain timeout resolves without leaving admission permanently closed |
-| Restoration | Old boot observations cannot alter current state | Verified restore opens admission after fresh identity bootstrap |
-| Input delivery | Uncertain input acknowledgment never causes automatic resend | Definite delivery or explicit uncertainty becomes observable |
-
-An uncertain action may intentionally retain its command slot.
-Do not assert eventual execution when safe recovery lacks sufficient evidence.
-Commands without execution deadlines may legitimately continue indefinitely.
-Every progress test states required health, available evidence, and its expected endpoint.
-
-## Layers and fixtures
-
-### Focused behavior checks
-
-Use table cases for validation, identity matching, allocation, and state decisions.
-Test limits immediately below, at, and above each configured boundary.
-Exercise malformed requests, conflicting identifiers, and stale observations.
-Keep assertions tied to public behavior and documented invariants.
-
-### Real local integration
-
-Integration tests combine components to check their shared behavior.
-Use disposable PostgreSQL databases for constraints, concurrent reservations, migrations, and reconnecting.
-Use separate connections to race conflicting and independent reservations.
-Verify both ownership exclusion and progress for unrelated machines.
-Use actual journals and output files for publication and recovery checks.
-Use local HTTP, HTTPS, and WebSocket servers with temporary certificates.
-Run identical outcome cases through polling and streaming.
-Include failed upgrades, disconnects, replay, expired output, and final collection.
-Use actual helper processes for detachment, stdin, deadlines, and cancellation.
-Substitute only virtualization and privileged networking where local integration requires it.
-Validate substitutes against real components when relevant capabilities become available.
-
-### PostgreSQL integration setup
-
-Pure decision tests and the custom simulator require no database server.
-Real store tests require an explicitly configured disposable PostgreSQL fixture.
-Pin the tested server version and record its durability and isolation settings.
-Use the same driver and migrations as production.
-Each test run owns its database names, credentials, and cleanup scope.
-Never discover or reuse an operator's application database implicitly.
-Restart tests require an exclusively owned server instance, not merely another database.
-Publish fixture setup and teardown commands when their implementation exists.
-Missing prerequisites must fail explicit integration checks, not silently skip them.
-CI must provision its disposable fixture before running the full suite.
-
-Check uniqueness, conditional updates, transaction rollback, and concurrent capacity admission.
-Exercise exhausted connection pools, cancelled waits, lock contention, and reconnection.
-Test recognized transaction-abort retries under the selected isolation policy.
-Bound retries and preserve request identifiers throughout recovery.
-An interrupted commit acknowledgment can leave its outcome unknown.
-Inspect durable request records before deciding whether further mutation is safe.
-A missing row does not prove an in-flight transaction already aborted.
-Keep guest execution outside database transaction retries.
-PostgreSQL documents isolation semantics and structured SQLSTATE errors.
-See [transaction isolation](https://www.postgresql.org/docs/current/transaction-iso.html) and [error codes](https://www.postgresql.org/docs/current/errcodes-appendix.html).
-
-### Real-machine validation
-
-Privileged checks require actual virtualization, networking access, and disposable guest resources.
-Verify boot, SSH, two-machine independence, process survival, snapshots, and restoration.
-Include service-manager shutdown behavior; process detachment alone cannot establish survival.
-Verify guest child handling and cleanup against actual operating-system behavior.
-Local substitutes cannot establish kernel, Firecracker, image, or host-network correctness.
-An explicitly requested validation must report missing prerequisites as failure or blockage.
-Never report skipped virtualization checks as passing machine coverage.
-
-### Resource and timing discipline
-
-Each test owns its temporary directories, listeners, child processes, and cleanup.
-Never use an operator's live runtime directory or existing guests as fixtures.
-Verify exact ownership before signaling processes or removing network resources.
-Use explicit readiness handshakes instead of sleeping for assumed startup durations.
-Inject clocks only where application timing decisions need control.
-Real subprocesses still need bounded deadlines to detect hangs.
-Record the deadline, observed phase, and surviving resources when a check times out.
-Check process, listener, and file cleanup even after expected failures.
-
-## Failure and crash testing
-
-Returning an error exercises an error path within a surviving process.
-A crash also removes memory, interrupts coordination, and bypasses ordinary cleanup.
-Terminate relevant subprocesses, then reconstruct state through the actual recovery paths.
-For guest journals and output files, reopen persisted files after process termination.
-An `agent-plane` crash normally leaves PostgreSQL running; test that distinction explicitly.
-Separately restart the disposable database and verify connection recovery and durable records.
-Neither crash implies guest termination or safe replay of uncertain operations.
-Place explicit handshakes around selected boundaries to target the intended interruption.
-
-Begin with these fault locations:
-
-1. Guest acceptance persisted, before process identity publication.
-2. Command started, before acceptance reaches the host.
-3. Host output appended, before its collection cursor commits.
-4. File replacement published, before its result enters the journal.
-5. Snapshot artifacts written, before the completed manifest publishes.
-6. Snapshot published, before machine termination receives durable confirmation.
-7. Restore launched, before fresh boot identity opens admission.
-
-After each interruption, restart the affected component using its existing files.
-Check durable effects, preserved ownership, duplicate prevention, and explicit uncertainty.
-Inject one-time and persistent write, rename, synchronization, or transport failures where relevant.
-Begin with one failure per scenario; combine failures when risks justify them.
-Also fail recovery itself when that boundary controls accepted durability guarantees.
-
-Process termination does not simulate power loss or lost filesystem caches.
-Injected filesystem errors do not establish every storage device's behavior.
-Record these limits beside durability results.
-Avoid building a filesystem simulator without a specific unresolved durability requirement.
-
-## Condition independence
-
-A condition is one Boolean input to a decision.
-Condition independence means changing one condition can change that decision's result.
-MC/DC means Modified Condition/Decision Coverage, a stronger coverage discipline.
-Use its independence idea for critical admission and recovery decisions.
-We do not claim measured or formal MC/DC coverage.
-
-Consider admission after resolving duplicate identifiers:
+For example, after resolving matching retries, a new command might require:
 
 ```text
 allow = ready && slot_free && !draining
 ```
 
-Each pair below changes only one input from the baseline.
-
-| Case | ready | slot_free | draining | allow | Pair |
+| Case | ready | slot_free | draining | allow | Independence pair |
 | --- | --- | --- | --- | --- | --- |
-| Baseline | true | true | false | true | None |
-| Not ready | false | true | false | false | Baseline and not ready |
-| Slot occupied | true | false | false | false | Baseline and slot occupied |
-| Draining | true | true | true | false | Baseline and draining |
+| A | true | true | false | true | Baseline |
+| B | false | true | false | false | A/B: ready |
+| C | true | false | false | false | A/C: slot_free |
+| D | true | true | true | false | A/D: draining |
 
-Check both rejection and absence of external effects for denied requests.
-Also verify matching retries return recorded outcomes despite occupied slots or draining.
-Apply similar pairs to identity checks and snapshot publication prerequisites.
-Review feasible input combinations; coupled conditions may prevent simple independent pairs.
-Go's usual coverage reports measure statements, not condition independence or formal MC/DC.
-Use coverage to locate unexecuted statements and guide review.
-High statement coverage cannot establish complete behavior, branch, or recovery coverage.
-Do not remove defensive checks simply to raise coverage percentages.
+Also test that a matching retry returns the recorded outcome while the slot is occupied or admission is draining.
+The independence pairs establish coverage of this decision; they do not establish the correctness of the surrounding workflow.
 
-## Progress after failures
+Keep a reviewable mapping from production decisions and conditions to executed test cases.
+Account for short-circuit evaluation; an input value alone does not show that its condition was evaluated.
+When predicates call other predicates, cover the decisions inside those functions too.
+For coupled or unreachable conditions, simplify the expression when that improves the design, or document the exact infeasible pair and why it cannot occur.
+Report such exclusions and uncovered decisions; do not count them as covered or remove defensive checks to improve a percentage.
+Exclude generated and third-party code from the project coverage scope explicitly.
 
-First, inject selected faults while checking safety invariants.
-Then restore the conditions necessary for the chosen component's progress.
-Keep unrelated failures fixed when healthy components should tolerate them.
-Require the specified observable result within a documented bound.
+Begin with reviewed case mappings; add automated MC/DC measurement only after verifying what the tool measures.
+Go's ordinary coverage output measures statements and cannot establish MC/DC.
+Report coverage only for the code and cases actually checked, without claiming a repository-wide result from a few examples.
 
-For example, keep machine A unreachable while machine B stays healthy.
-Require B's reconciliation and completed-action collection within the test's chosen deadline.
-Ensure A remains unresolved without blocking B's admission or collection.
-Do not periodically restart B to conceal stalled recovery.
-Separately test recovery when A becomes reachable with matching identities.
+Coverage is one requirement within basic testing. Also:
 
-Choose bounds from configured deadlines, polling intervals, and expected work.
-Document scheduling allowances for real processes and slow test hosts.
-A finite test establishes observed bounded progress under those assumptions.
-It does not prove termination under every possible schedule or permanent failure.
+- Test values below, at, and above limits; empty and malformed input; overflow; conflicting identifiers; and stale observations.
+- Assert behavior and invariants independently of implementation calculations. Do not copy the production algorithm into the expected-result code.
+- Add a regression case for every fixed defect, including defects found through fuzzing.
+- Run the race detector on exercised concurrent code and static checks on production and tests. Simulation and MC/DC do not replace these checks.
 
-## Generated cases and simulation
+### Fuzz input boundaries and pure logic
 
-Fuzzing generates varied inputs to expose unexpected behavior.
-Start with bounded decoding, cursor, and size-limit cases when implementations exist.
-Keep every reproduced defect as a small regression case.
-A seed initializes a repeatable sequence of generated choices.
-Record seeds, input traces, configured faults, versions, and failing assertions.
-Seeds do not control Go scheduling, real network timing, or subprocess execution.
+Use Go's built-in fuzzing through `FuzzXxx(*testing.F)` tests in `*_test.go`; no separate fuzzing framework is needed.
+Add a target when varied inputs can expose a named risk and the expected property is clear.
+Fuzzing supplements the explicit MC/DC pairs; generated coverage does not establish condition independence.
 
-Deterministic simulation controls modeled time, scheduling, randomness, and external effects.
-Start a focused harness alongside the first production coordination code.
-Build a custom event scheduler using ordinary Go and its standard library.
-Keep it local to the first owning package and grow it incrementally.
-This bounded implementation also teaches event ordering, causality, and failure recovery.
-No patched runtime, hosted service, or external simulator is the baseline.
-A coordinator makes state decisions and requests effects from external components.
-Both production and simulation must call the identical decision function.
-The simulator schedules typed events, logical deadlines, and controlled effect completions.
-It must not copy production admission rules into a separate toy implementation.
-
-Slice 1 establishes boundaries and exercises actual registration and reservation decisions.
-Scaffolding alone never counts as production validation.
-First commit registration, lose its response, then retry and restart.
-Assert stable identity, one reservation, conflicting-request rejection, and preserved registration ownership.
-Compare reservation contracts against real PostgreSQL behavior using concurrent connections.
-Expand through lifecycle, guest acceptance, collection, recovery, and snapshots as implemented.
-
-Crashes discard volatile coordinator state while retaining modeled durable records.
-Already dispatched effects may finish even when their acknowledgments disappear.
-Restart through production recovery logic, inspecting existing identifiers before ambiguous mutations.
-Keep pending-effect outcomes and allowed storage assumptions explicit.
-
-Record revision, toolchain, generator version, configuration, seed, and complete event trace.
-Replay recorded events directly; seeds alone may change meaning after code changes.
-Control all ordering inside the core, including map traversal and simultaneous events.
-Do not rely on ordinary goroutine scheduling for deterministic replay.
-Check independent invariants after each transition and progress under stated health assumptions.
-
-Full operating-system and Firecracker simulation remain outside the selected approach.
-Actual storage, processes, transports, and virtualization still require their separate tests.
-Keep fault models small and compare adapter contracts against real implementations.
-See [TEST_RESEARCH.md](docs/TEST_RESEARCH.md) for boundaries, crash semantics, and milestone acceptance.
-
-## Commands and delivery
-
-No project-specific test command is currently implemented or verified.
-No Go module exists yet, so ordinary Go commands have nothing to check.
-The following commands are planned interfaces, not runnable instructions today.
-
-| Planned command | Purpose |
+| Target, when implemented | Properties to check |
 | --- | --- |
-| `make test-fast` | Short Go tests with explicitly documented omissions |
-| `make test` | Complete unprivileged suite using its disposable PostgreSQL fixture |
-| `make test-race` | Detect exercised data races across the unprivileged suite |
-| `make test-integration` | Real component checks requiring disposable PostgreSQL |
-| `make test-sim` | Custom deterministic coordinator scenarios and replay, first delivered in slice 1 |
-| `make test-fuzz` | Bounded runs of explicitly named fuzz targets |
-| `make coverage` | Generate statement coverage for review |
-| `make vet` | Static Go diagnostics |
-| `make validate` | Preflight followed by required real-machine validation |
+| Request, identifier, cursor, and journal decoding | Malformed or truncated input returns an error without panicking; accepted values satisfy format and size constraints |
+| Encoding and decoding | Valid values survive a round trip under documented normalization rules |
+| Size, offset, and deadline calculations | Boundary values cannot wrap, bypass limits, or request prohibited effects |
+| Pure admission and transition functions | Inputs remain unchanged; identical inputs give identical results; valid transitions preserve invariants and rejected requests produce no prohibited effects |
 
-A race detector finds exercised races; a passing run cannot exclude every race.
-Simulation scenarios remain part of `make test` once their production core exists.
-`make test-sim` selects those scenarios for focused iteration and replay.
-Fast checks and simulation remain database-free; full testing includes PostgreSQL integration.
-Fuzz commands must document target names, duration, and reproduction syntax once implemented.
-Fast mode must name omitted checks; full unprivileged testing includes them.
-CI initially runs complete unprivileged tests, race checks, and static diagnostics.
-Keep privileged validation separate until an appropriate runner exists.
-CI must preserve useful failure logs and propagate failing exit statuses.
-Never implement success placeholders for missing checks.
+Generate reachable internal states through valid operations; test malformed external input separately.
+Keep each target fast and deterministic, with fresh state per invocation and bounded input sizes and work.
+Exercise invalid input rather than filtering away the cases the parser must reject.
+Keep real databases, subprocesses, and network services in the real-effect checks.
 
-Introduce testing with each implemented behavior, starting with slice 1 boundaries and tooling.
-Add real database and API cases with slice 1 implementation.
-Add process and lifecycle checks when those components become executable.
-Add recovery checks alongside journals and collectors, before later integration milestones.
-Keep privileged milestone evidence distinct from local test results.
-Slice 7's audit checks remaining gaps; it does not postpone earlier failure testing.
+Seed targets with `f.Add` examples covering normal use, empty input, malformed data, and limits.
+Retain minimized failures in `testdata/fuzz/<FuzzName>/` with the fix; ordinary `go test` reruns the seed corpus.
+Record the failing input and reproduction command, not just a random seed.
+Use the [native Go fuzzing guide](https://go.dev/doc/security/fuzz/) for target and corpus mechanics.
 
-## Maintenance and acceptance
+Once a target exists, run one named target in one package with a fixed budget.
+These are illustrative commands, not implemented repository targets:
 
-For each change, record its behavior, invariant, failure boundary, and verification scope.
-Astra updates relevant fixtures, regression cases, and this guide as needed.
-Update command status only after execution establishes its actual behavior.
-For failures, retain the exact command, observed result, and smallest reproduction.
-Include relevant seed, trace, fault location, versions, and diagnostic artifact paths.
-Keep logs free of secrets and unrelated operator data.
+```sh
+go test ./path/to/package -run='^$' -fuzz='^FuzzDecodeRequest$' -fuzztime=30s -parallel=2
+go test ./path/to/package -run='^FuzzDecodeRequest/<corpus-hash>$'
+```
 
-The lead checks the combined changes and performs appropriate independent validation.
-Record remaining limitations and missing privileged evidence before accepting affected milestones.
-Do not repeat checks without changed code, failures, or unresolved concerns.
-Documentation changes need link and consistency checks, not unrelated runtime execution.
-Remove obsolete fixtures when behavior changes; retain relevant historical regression protection.
-Keep this guide synchronized with implemented commands and accepted architecture decisions.
-Commit guide updates alongside the testing changes they explain.
+Bound minimization and the overall job timeout too; longer local or scheduled runs can explore beyond the CI budget.
+If later simulation work benefits from fuzzed event sequences, feed bounded inputs into the existing deterministic scheduler and preserve its replay trace.
+Keep that extension within the planned progression to generated schedules in slice 4.
+
+## 2. Simulation testing: coordination and recovery
+
+Build a small event scheduler in ordinary Go alongside the first production coordinator.
+Production and simulation must call identical decision functions, including guest decisions when the test makes claims about guest behavior.
+Keep the harness local to its first package until another implemented feature needs shared helpers.
+
+Represent requests and completions as typed events, and external work as effects.
+Use simulated adapters to control effect outcomes without a database, guest, or real clock.
+Start with fixed event sequences; introduce logical deadlines in slice 2 and bounded seeded schedules in slice 4.
+Keep event ordering explicit, including simultaneous events and order-sensitive map traversal.
+Do not depend on goroutine scheduling for reproducibility.
+
+For every scenario:
+
+- State the initial conditions, fault location, forbidden outcomes, and expected recovery.
+- Check safety invariants after every transition. Examples include one reservation per identity, no duplicate execution, and no publication before its durability prerequisites.
+- Separate volatile state from modeled durable records. Crash by discarding memory and restart through production recovery; already dispatched effects may still complete after the crash.
+- Preserve uncertainty when an acknowledgment disappears. Inspect stable request identifiers before retrying ambiguous mutations. A missing record does not prove a pending transaction aborted.
+- Require progress within explicit event and logical-time bounds under stated health and delivery assumptions. Allow unresolved work to retain its reservation when safe recovery lacks evidence.
+- Save readable events, effects, faults, outcomes, and the failed assertion. Include initial state, configuration, revision, toolchain, harness version, and generator version and seed when used.
+- Replay the actual recorded choices without regenerating them. Reject incompatible traces clearly; retain important failures as short regression scenarios.
+
+Deliver eligible healthy events fairly during progress checks; do not repeatedly restart a component to conceal stalled recovery.
+Model storage transactions as atomic commit-or-no-commit outcomes, with response delivery controlled separately.
+Treat control-plane restart, database restart, and connection loss as distinct faults.
+The simulator covers coordination contracts, not PostgreSQL internals, filesystem power-loss behavior, kernel scheduling, packet routing, encryption, or Firecracker internals.
+Validate those external boundaries through the real checks below.
+
+### Implement the scope already planned
+
+Follow the numbered slices; expand only the current slice after discussing its boundaries and acceptance evidence.
+All seven remain planned. Keep earlier scenarios running as later behavior is added.
+
+| Slice | Add to simulation | Required evidence |
+| --- | --- | --- |
+| [1. Durable requests](plans/mvp/breakdown/1-durable-requests.md) | Fixed events, reservations, lost replies, pending commits, restart, and trace replay | One stable identity across retry and restart; conflicting reuse rejected; unknown commits do not permit conflicting work; real PostgreSQL contracts agree |
+| [2. Live machines](plans/mvp/breakdown/2-live-machines.md) | Logical deadlines, lifecycle effects, delayed health, launch uncertainty, and partial cleanup | Distinct allocations; no duplicate launch without resolved ownership; real boot, SSH, and two-machine independence |
+| [3. Detached commands](plans/mvp/breakdown/3-detached-commands.md) | Guest acceptance, lost acknowledgment, launch gaps, and output collection | No blind replay; accepted execution survives caller detachment and control-plane outage; cursors never exceed durable output; real process and journal checks |
+| [4. Working with commands](plans/mvp/breakdown/4-command-actions.md) | File/input/cancel races, deadlines, and bounded seeded schedules | Correct cancel-versus-complete behavior; no automatic resend of uncertain input; bounded output; real file, pipe, and process effects |
+| [5. Recovery](plans/mvp/breakdown/5-recovery.md) | Independent crashes, stale observations, and bounded progress | Healthy machine B progresses while A remains unreachable; separate real service, guest-agent, and database restarts |
+| [6. Streaming](plans/mvp/breakdown/6-streaming.md) | Polling/streaming changes, duplicate delivery, and reconnect schedules | Equivalent retained outcomes without restarting execution; real HTTP/HTTPS/WebSocket behavior and fallback |
+| [7. Snapshots](plans/mvp/breakdown/7-snapshots.md) | Drain races, capture/publication failures, termination, and restored identities | Incomplete artifacts cannot restore; old boot observations are rejected; real snapshot restoration succeeds |
+
+For slice 1, commit registration, lose the reply, retry, restart, and inspect.
+Also lose the connection while a commit remains pending and submit conflicting requests.
+Compare real PostgreSQL reservation outcomes using concurrent connections.
+Replay the same scenario twice and compare normalized traces and outcomes.
+Temporarily break a tested invariant to confirm the scenario detects that defect, then restore correct behavior.
+Harness scaffolding alone does not satisfy this acceptance gate.
+
+## Validate real effects
+
+Use shared contract cases for simulated and real adapters where practical.
+Check returned classifications, persisted state, effect ordering, and resource ownership.
+Document model assumptions and intentional differences beside each adapter.
+Add the following checks when their production slice introduces the corresponding boundary:
+
+| Boundary | Checks to implement |
+| --- | --- |
+| PostgreSQL | Production migrations and driver; uniqueness, concurrent reservations and capacity admission, rollback, contention, cancellation, bounded transaction-abort retries, lost commit acknowledgment, and reconnecting |
+| Journals and output files | Actual writes, synchronization, publication, retention, and recovery after process termination; output saved before cursor advancement |
+| Processes and lifecycle | Actual helper children, detachment, stdin, deadlines, cancellation, and cleanup; service-manager shutdown preserves accepted guest work |
+| Transports | Local HTTP/HTTPS/WebSocket servers; trust, failed upgrades, disconnects, replay, fallback, and equivalent polling/streaming outcomes |
+| Machines and snapshots | Actual boot, SSH, two-machine independence, snapshot publication, restoration, and fresh boot identity |
+
+Keep guest execution outside retried database transactions.
+Test crashes separately from returned errors: terminate the relevant process and recover using its existing durable files or records.
+Target interruptions with explicit handshakes, including acceptance before launch evidence, output before cursor commit, and artifacts before publication.
+Fail recovery itself where a durability or ownership guarantee depends on it.
+Process termination does not establish power-loss durability.
+
+Each test must own its temporary files, listeners, children, database fixture, and cleanup scope.
+Use an explicitly configured disposable PostgreSQL fixture with a pinned server version and recorded isolation and durability settings.
+Database restart checks require an exclusively owned server instance.
+Never borrow an operator's database, runtime directory, or guests implicitly.
+Use readiness signals instead of startup sleeps; bound waits and report pending work and surviving resources on timeout.
+Verify cleanup after expected failures and check ownership before signaling or deleting resources.
+Missing prerequisites must fail an explicitly requested check; skipped VM checks are not passing machine evidence.
+
+## Deliver and maintain the checks
+
+Introduce `test-fast`, `test-sim`, and `test` with slice 1; add the remaining commands as their checks become executable.
+These interfaces are planned, not implemented:
+
+| Command | Required behavior |
+| --- | --- |
+| `make test-fast` | Basic behavior and MC/DC cases that need no external services; name omitted checks |
+| `make test-sim` | Deterministic scenarios and recorded-trace replay without external services |
+| `make test` | Complete unprivileged tests, including simulation and disposable PostgreSQL integration |
+| `make test-integration` | Focused real-component checks with explicit fixtures |
+| `make test-race` / `make vet` | Race detection across the unprivileged suite / static diagnostics |
+| `make coverage` | Report executed decision/condition case mappings and unresolved MC/DC gaps; label statement coverage separately |
+| `make test-fuzz` | Native Go fuzzing of named targets, one target per invocation, with explicit time and worker budgets and reproduction commands |
+| `make validate` | Preflight and required real-machine checks on a capable host |
+
+Continuous integration must provision fixtures and run complete unprivileged tests, race checks, and static diagnostics.
+Run committed fuzz corpus cases in the normal suite. Once targets exist, add bounded fuzz discovery runs for selected targets and retain failure inputs as artifacts.
+Retain useful failure logs and propagate failure exit statuses; never implement successful placeholders for missing checks.
+Keep privileged validation evidence separate until a suitable runner exists.
+
+Before accepting a behavior change, check its observable contract, MC/DC evidence, relevant simulation scenarios, and real effects.
+Record exact commands and observed results, remaining coverage gaps, model limitations, and any missing machine evidence.
+Keep reproductions and traces free of secrets and unrelated operator data.
+Update this guide with the testing changes it describes; mark commands implemented only after running them.
+Documentation-only changes need link and consistency checks, not unrelated runtime tests.

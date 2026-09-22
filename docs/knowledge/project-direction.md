@@ -13,6 +13,8 @@ PostgreSQL replaces SQLite in the active design, not historical plan revisions.
 The control plane uses concurrent connections while preserving explicit admission ownership.
 A planned custom simulator exercises shared production decisions using controlled events and faults.
 The simulator requires no database; real integration tests require isolated PostgreSQL.
+Testing direction updated 2026-09-22: use MC/DC as the coverage standard within basic behavior testing, targeted native Go fuzzing, and deterministic simulation.
+Compose business logic from pure functions and apply the invariant, boundary, and resource rules in [TESTING.md](../../TESTING.md).
 Astra owns testing; the lead validates results, maintains the plan, and commits changes.
 
 No simulator, PostgreSQL integration, or project-specific test targets exist yet.
@@ -37,7 +39,7 @@ The breakdown controls implementation order; v1.5 remains a detailed reference.
 | `.state/` (untracked) | One append-only activity file per set of agent work; cleaned up after its knowledge is saved; see [CLAUDE.md](../../CLAUDE.md#working-state) |
 | [Target architecture](../../plans/1-mvp/v1.5_architecture.md) | Full-platform responsibilities, connections, and major concerns |
 | [Detailed reference](../../plans/1-mvp/v1.5.md) | Earlier contracts, suggested implementation details, and historical planning tracker |
-| [TESTING.md](../../TESTING.md) | Testing strategy, command status, and acceptance evidence |
+| [TESTING.md](../../TESTING.md) | Direct requirements for MC/DC, simulation, real-effect validation, and acceptance evidence; planned command interfaces |
 | [TEST_RESEARCH.md](../TEST_RESEARCH.md) | Simulation feasibility, boundaries, alternatives, and learning sequence |
 | [TIGERSTYLE.md](../TIGERSTYLE.md) | Go coding conventions and invariant handling |
 
