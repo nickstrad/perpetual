@@ -5,12 +5,15 @@ Mermaid sources end in `.mmd`; rendered text lives inside the Markdown files.
 Each embed starts with a `<!-- draw-visual: diagrams/NAME.mmd -->` marker.
 Never edit rendered text; change the source, then regenerate.
 
-```text
- S=../../../.claude/skills/draw-visual/scripts
- $S/setup.sh                      install the renderer once per machine
- $S/render.py diagrams/NAME.mmd   preview one diagram
- $S/render.py --update FILE.md    regenerate every embed in a document
- $S/render.py --check  *.md       fail on stale or over-wide embeds
+Run from `plans/mvp/breakdown/` using either global installation:
+
+```bash
+S="$HOME/.claude/skills/draw-visual/scripts"
+# For Codex: S="$HOME/.codex/skills/draw-visual/scripts"
+"$S/setup.sh"                      # install the renderer once per machine
+"$S/render.py" diagrams/NAME.mmd   # preview one diagram (replace NAME)
+"$S/render.py" --update FILE.md    # regenerate a document (replace FILE)
+"$S/render.py" --check *.md        # fail on stale or over-wide embeds
 ```
 
 Use the `draw-visual` skill to add or change a diagram.

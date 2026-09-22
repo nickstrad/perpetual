@@ -5,9 +5,11 @@ Recorded: 2026-09-20. Status: verified findings on this host, plus the adopted c
 Development happens on a VM without a display.
 Diagrams must therefore read well as plain text.
 We keep a diagram source and embed its Unicode text render in Markdown.
-The [`draw-visual` skill](../../.claude/skills/draw-visual/SKILL.md) holds the procedure and scripts.
-Its [`visual-drawer` subagent](../../.claude/agents/visual-drawer.md) does the drawing and layout iteration.
-Its [syntax reference](../../.claude/skills/draw-visual/reference.md) lists constructs that render cleanly.
+The global `draw-visual` skill holds the procedure, scripts, and `reference.md` syntax guide.
+Claude's copy lives at `~/.claude/skills/draw-visual/` and delegates drawing and layout
+iteration to `~/.claude/agents/visual-drawer.md`.
+Codex's copy lives at `~/.codex/skills/draw-visual/` and runs the workflow directly.
+These are user-level installations; this repository does not bundle the skill.
 
 ## Verified tool findings
 
@@ -39,6 +41,9 @@ Render options live in each source's first line, so re-renders stay identical.
 Prefer 100 columns; the checker's limit is 110.
 Prose stays ASCII; only generated diagram blocks contain Unicode.
 Timelines, cut-point maps, and state pictures stay hand-written; layout engines handle them badly.
+Use the document's platform actor names: Terminal, `perpetual` CLI, `agent-plane`,
+PostgreSQL, Firecracker, `vmagent`, and Command; do not substitute "user" or "human".
+Diagrams describe planned behavior unless the document says otherwise.
 
 ## Installation and safety
 
@@ -46,11 +51,16 @@ Timelines, cut-point maps, and state pictures stay hand-written; layout engines 
 It builds mermaid-ascii with Go at a pinned version.
 `--with-plantuml` additionally downloads a private JRE and the PlantUML jar, about 200 MB.
 Both steps need network access; re-verify the table above after changing pinned versions.
+The global Claude and Codex copies share this renderer installation.
+
+On 2026-09-20, the skill and Claude agent moved out of this repository to the global
+locations above. Both skill variants rendered Mermaid and PlantUML examples, regenerated
+Markdown embeds without changing surrounding prose, and rejected stale embeds.
+All 47 existing embeds across 14 breakdown documents passed the renderer's check.
 
 ## Unresolved
 
-The creating session could not invoke either one immediately after writing them.
-Both appeared in that same session later, started from `plans/mvp`, without a restart.
-The delay before discovery was not measured.
+Global skill discovery in a fresh Claude or Codex session has not been verified;
+validation invoked the installed scripts directly.
 Rendered Mermaid sources were not checked in a graphical Mermaid renderer.
 Labels avoid `#` and `;` for graphical renderers; their acceptance remains unverified.
