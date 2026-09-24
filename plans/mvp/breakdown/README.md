@@ -1,6 +1,9 @@
 # MVP slices: platform and simulator together
 
 Start here, then read the next unfinished slice.
+Slice 1 registration is implemented and locally validated on its implementation
+branch; see the [acceptance evidence](../../../docs/testing/durable-requests-acceptance.md).
+Slices 2–7 remain planned.
 The [project direction](../../../docs/knowledge/project-direction.md) entry records which slices are delivered.
 A vertical slice delivers one useful behavior across its required components.
 Each numbered plan pairs platform work with corresponding simulator growth.

@@ -1,7 +1,9 @@
 # 1. Durable requests and the first simulator
 
 Read the [roadmap](README.md) and [cumulative architecture](1-durable-requests_architecture.md).
-Starting point: an empty codebase; no Go module or platform component exists yet.
+Original starting point: an empty codebase. Registration is now implemented and locally
+validated; full MC/DC coverage is not established. See the [implementation plan](1-durable-requests-plan.md),
+[testing guide](../../../TESTING.md), and [usage](../../../README.md).
 
 ## Actors and actions
 

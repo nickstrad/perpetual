@@ -14,14 +14,14 @@ Building these bounded pieces serves the project's learning purpose.
 No patched runtime, hosted service, or additional simulator dependency is required.
 
 This document records research and proposed implementation boundaries on 2026-09-18.
-No coordinator, simulator, test target, or CI implementation exists yet.
-PostgreSQL is the selected state backend; database fixtures remain unimplemented.
+Slice 1 now implements the coordinator, fixed simulator, test commands, CI configuration,
+and owned PostgreSQL fixtures. Current execution evidence and limitations belong in TESTING.md.
 The custom simulator remains database-free.
 [TESTING.md](../TESTING.md) defines MC/DC coverage, simulation requirements, real-effect validation, and maintenance.
 The [MVP breakdown](../plans/mvp/breakdown/README.md) pairs platform slices with simulator growth.
 The [project direction](knowledge/project-direction.md) entry records which slices have been delivered.
-Astra owns the harness, scenarios, fixtures, invariant checks, and testing documentation.
-Production owners implement shared decisions and real adapters with Astra's collaboration.
+The test owner maintains the harness, scenarios, fixtures, invariant checks, and testing documentation.
+Production owners implement shared decisions and real adapters with the test owner’s collaboration.
 The lead independently validates results and updates the plan and tracker.
 
 ## Lessons from primary sources
@@ -212,7 +212,7 @@ Slice 1 defines boundaries, event ordering, trace metadata, and minimal harness 
 Scaffolding alone does not establish tested production behavior.
 That slice supplies real registration decisions alongside their first simulation scenario.
 It introduces `make test-sim` against that shared production core.
-That command remains planned until its scenarios execute and produce verification evidence.
+That command now executes the fixed registration scenarios; see TESTING.md for evidence.
 
 1. Submit registration A with a particular request fingerprint.
 2. Commit its reservation, then lose the caller's response.
