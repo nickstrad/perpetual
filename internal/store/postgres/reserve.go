@@ -13,16 +13,23 @@ import (
 
 const maxAbortAttempts = 3
 
+// PostgreSQL SQLSTATE codes this adapter distinguishes.
+const (
+	sqlStateUniqueViolation      = "23505"
+	sqlStateLockNotAvailable     = "55P03"
+	sqlStateSerializationFailure = "40001"
+	sqlStateDeadlockDetected     = "40P01"
+)
+
 // Reserve repeats only confirmed PostgreSQL transaction aborts. The original
 // request and candidate survive every attempt; no external effect is retried.
 func (s *Store) Reserve(ctx context.Context, request registration.Request) registration.Outcome {
-	if registration.ValidateRequestID(string(request.ID)) != nil || registration.ValidateMachineID(string(request.CandidateID)) != nil {
-		return registration.Outcome{Kind: registration.OutcomeUnavailable}
-	}
+	// registration.NewRequest validated these fields. A request that fails here
+	// did not come from it, which is a caller defect rather than an operating error.
+	invariant.Check(registration.ValidateRequestID(string(request.ID)) == nil, "reservation request ID invalid")
+	invariant.Check(registration.ValidateMachineID(string(request.CandidateID)) == nil, "reservation candidate ID invalid")
 	fingerprint, err := registration.Fingerprint(request.Parameters)
-	if err != nil || fingerprint != request.Fingerprint {
-		return registration.Outcome{Kind: registration.OutcomeUnavailable}
-	}
+	invariant.Check(err == nil && fingerprint == request.Fingerprint, "reservation fingerprint mismatch")
 	ctx, cancel := context.WithTimeout(ctx, s.options.OperationTimeout)
 	defer cancel()
 	for attempt := 0; attempt < maxAbortAttempts; attempt++ {
@@ -46,26 +53,21 @@ func (s *Store) reserveOnce(ctx context.Context, request registration.Request) (
 	if err := setLocalTimeouts(ctx, tx, s.options); err != nil {
 		return classifyBeforeCommit(err)
 	}
-	var used, limit int64
-	err = tx.QueryRow(ctx, "SELECT used,max_registrations FROM registration_gate WHERE singleton_id=1 FOR UPDATE").Scan(&used, &limit)
+	used, limit, err := lockGate(ctx, tx)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			invariant.Check(false, "registration gate missing")
-		}
 		return classifyBeforeCommit(err)
 	}
-	invariant.Check(limit > 0, "registration gate limit invalid")
-	invariant.Check(used >= 0 && used <= limit, "registration gate count invalid")
+	// Startup verified the configured limit; a change while running is a defect.
 	invariant.Check(uint64(limit) == s.options.MaxRegistrations, "registration gate limit changed")
 
 	// This is a distinct Read Committed statement after acquiring the gate.
 	// An earlier holder's commit is now visible; a plain read before the gate
 	// would not prove permission to insert.
 	observed := registration.Observation{Used: uint64(used), Limit: uint64(limit)}
-	record, err := scanRecord(tx.QueryRow(ctx, "SELECT "+recordColumns+" FROM machine_registrations WHERE request_id=$1", string(request.ID)))
+	existing, err := scanRecord(tx.QueryRow(ctx, selectRecord("request_id"), string(request.ID)))
 	if err == nil {
 		observed.HasRequest = true
-		observed.Record = record
+		observed.Record = existing
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return classifyBeforeCommit(err)
 	}
@@ -76,37 +78,28 @@ func (s *Store) reserveOnce(ctx context.Context, request registration.Request) (
 		}
 	}
 	admission := registration.DecideAdmission(request, observed)
-	switch admission.Kind {
-	case registration.AdmissionExisting:
-		return registration.Outcome{Kind: registration.OutcomeExisting, Record: admission.Record}, false
-	case registration.AdmissionRequestConflict:
-		return registration.Outcome{Kind: registration.OutcomeRequestConflict}, false
-	case registration.AdmissionNameConflict:
-		return registration.Outcome{Kind: registration.OutcomeNameConflict}, false
-	case registration.AdmissionCapacity:
-		return registration.Outcome{Kind: registration.OutcomeCapacity}, false
-	case registration.AdmissionCreate:
-	default:
-		invariant.Check(false, "invalid registration admission kind")
+	if admission.Kind != registration.AdmissionCreate {
+		return admission.Outcome(), false
 	}
 
-	var created time.Time
+	var createdAt time.Time
 	err = tx.QueryRow(ctx, `INSERT INTO machine_registrations
 		(request_id,machine_id,name,image,vcpus,memory_mib,disk_mib,fingerprint_version,fingerprint,state)
 		VALUES($1,$2,$3,$4,$5,$6,$7,1,$8,'registered') RETURNING created_at`,
 		string(request.ID), string(request.CandidateID), request.Parameters.Name, request.Parameters.Image,
 		int32(request.Parameters.VCPUs), int64(request.Parameters.MemoryMiB), int64(request.Parameters.DiskMiB),
-		request.Fingerprint[:]).Scan(&created)
+		request.Fingerprint[:]).Scan(&createdAt)
 	if err != nil {
+		// The constraint name needs the full server error, not just its SQLSTATE.
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.As(err, &pgErr) && pgErr.Code == sqlStateUniqueViolation {
 			if pgErr.ConstraintName == "machine_registrations_machine_id_key" {
 				// A randomly generated candidate may collide. The service reports
 				// unavailability and the caller retries its original request ID;
 				// this attempt must not invent a replacement identity.
 				return registration.Outcome{Kind: registration.OutcomeUnavailable}, false
 			}
-			invariant.Check(false, "uniqueness conflict despite registration gate")
+			invariant.Fail("uniqueness conflict despite registration gate")
 		}
 		return classifyBeforeCommit(err)
 	}
@@ -114,21 +107,21 @@ func (s *Store) reserveOnce(ctx context.Context, request registration.Request) (
 	err = tx.QueryRow(ctx, "UPDATE registration_gate SET used=used+1 WHERE singleton_id=1 AND used<max_registrations RETURNING used").Scan(&nextUsed)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			invariant.Check(false, "registration gate increment failed")
+			invariant.Fail("registration gate increment failed")
 		}
 		return classifyBeforeCommit(err)
 	}
 	invariant.Check(nextUsed == used+1, "registration gate increment mismatch")
-	record = registration.Record{
-		RequestID: request.ID, MachineID: request.CandidateID, Parameters: request.Parameters,
-		Fingerprint: request.Fingerprint, CreatedAt: created.UTC(),
-	}
 	if err := tx.Commit(ctx); err != nil {
 		// COMMIT may have reached PostgreSQL. Only a server SQLSTATE that
 		// confirms abort permits a database-only retry.
 		return classifyCommitError(err)
 	}
-	return registration.Outcome{Kind: registration.OutcomeCreated, Record: record}, false
+	created := registration.Record{
+		RequestID: request.ID, MachineID: request.CandidateID, Parameters: request.Parameters,
+		Fingerprint: request.Fingerprint, CreatedAt: createdAt.UTC(),
+	}
+	return registration.Outcome{Kind: registration.OutcomeCreated, Record: created}, false
 }
 
 func classifyCommitError(err error) (registration.Outcome, bool) {
@@ -145,14 +138,22 @@ func classifyBeforeCommit(err error) (registration.Outcome, bool) {
 	if retryableAbort(err) {
 		return registration.Outcome{Kind: registration.OutcomeUnavailable}, true
 	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "55P03" {
+	if sqlState(err) == sqlStateLockNotAvailable {
 		return registration.Outcome{Kind: registration.OutcomeBusy}, false
 	}
 	return registration.Outcome{Kind: registration.OutcomeUnavailable}, false
 }
 
 func retryableAbort(err error) bool {
+	state := sqlState(err)
+	return state == sqlStateSerializationFailure || state == sqlStateDeadlockDetected
+}
+
+// sqlState returns the server SQLSTATE, or "" when err carries no server error.
+func sqlState(err error) string {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && (pgErr.Code == "40001" || pgErr.Code == "40P01")
+	if errors.As(err, &pgErr) {
+		return pgErr.Code
+	}
+	return ""
 }

@@ -4,8 +4,6 @@ package testfixture
 import (
 	"context"
 	"fmt"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"net/url"
 	"os"
 	"os/exec"
@@ -13,6 +11,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var serial atomic.Uint64
@@ -34,18 +35,17 @@ func Database(t *testing.T) (*pgxpool.Pool, string) {
 	name := fmt.Sprintf("case_%d_%d", os.Getpid(), serial.Add(1))
 	var pool *pgxpool.Pool
 	created := false
-	// Register ownership immediately: later setup errors must still close the
-	// admin connection and remove any database already created by this call.
+	// Register ownership before CREATE DATABASE: later setup errors must still
+	// remove any database this call created.
 	t.Cleanup(func() {
 		if pool != nil {
 			pool.Close()
 		}
-		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
-		defer stop()
-		_ = admin.Close(cleanup)
 		if !created {
 			return
 		}
+		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
+		defer stop()
 		cleanupAdmin, err := pgx.Connect(cleanup, dsn)
 		if err != nil {
 			t.Errorf("reconnect fixture cleanup: %v", err)
@@ -56,7 +56,9 @@ func Database(t *testing.T) (*pgxpool.Pool, string) {
 			t.Errorf("drop owned database: %v", err)
 		}
 	})
-	if _, err = admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
+	_, err = admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize())
+	_ = admin.Close(ctx) // cleanup reconnects to drop the database
+	if err != nil {
 		t.Fatal(err)
 	}
 	created = true

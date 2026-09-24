@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"net"
@@ -41,18 +40,25 @@ func run(ctx context.Context, cfg config.Config) error {
 	if err != nil {
 		return err
 	}
+	// Close the pool, then the host lock, unless a failed worker join leaves
+	// both to process exit (see the registration shutdown path below).
 	joinSucceeded := true
+	var pool *pgxpool.Pool
 	defer func() {
-		if joinSucceeded {
-			_ = lock.Close()
+		if !joinSucceeded {
+			return
 		}
+		if pool != nil {
+			pool.Close()
+		}
+		_ = lock.Close()
 	}()
 	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("parse database configuration: %w", err)
 	}
 	poolCfg.MaxConns = int32(cfg.PoolConnections)
-	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	pool, err = pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return fmt.Errorf("open database pool: %w", err)
 	}
@@ -61,30 +67,25 @@ func run(ctx context.Context, cfg config.Config) error {
 		StatementTimeout: cfg.StatementTimeout, OperationTimeout: cfg.OperationTimeout,
 	})
 	if err != nil {
-		pool.Close()
 		return err
 	}
 	if err := store.Migrate(ctx); err != nil {
-		pool.Close()
 		return fmt.Errorf("prepare registration database: %w", err)
 	}
-	epoch, err := newEpoch()
+	epoch, err := registration.NewRandomID() // an epoch is an opaque unique string
 	if err != nil {
-		pool.Close()
-		return err
+		return fmt.Errorf("generate service epoch: %w", err)
 	}
 	service, err := registration.NewService(store, registration.ServiceOptions{
 		Epoch: epoch, MaxJobs: cfg.MaxJobs, QueueSize: cfg.QueueSize,
 		Workers: cfg.Workers, OperationTimeout: cfg.OperationTimeout,
 	})
 	if err != nil {
-		pool.Close()
 		return err
 	}
 	listener, err := net.Listen("tcp", cfg.ListenAddress)
 	if err != nil {
 		shutdownService(service, cfg.ShutdownGrace)
-		pool.Close()
 		return fmt.Errorf("listen: %w", err)
 	}
 	server := &http.Server{
@@ -119,7 +120,6 @@ func run(ctx context.Context, cfg config.Config) error {
 		joinSucceeded = false
 		return fmt.Errorf("registration shutdown: %w", stopErr)
 	}
-	pool.Close()
 	return err
 }
 
@@ -127,14 +127,6 @@ func shutdownService(service *registration.Coordinator, bound time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), bound)
 	defer cancel()
 	_ = service.Shutdown(ctx)
-}
-
-func newEpoch() (string, error) {
-	var bytes [16]byte
-	if _, err := rand.Read(bytes[:]); err != nil {
-		return "", fmt.Errorf("generate service epoch: %w", err)
-	}
-	return fmt.Sprintf("%x", bytes[:]), nil
 }
 
 // The listener owns connection tokens, including idle keep-alive connections.
@@ -161,7 +153,7 @@ func (l *limitedListener) Accept() (net.Conn, error) {
 		<-l.slots
 		return nil, err
 	}
-	return &limitedConn{Conn: conn, release: func() { <-l.slots }}, nil
+	return &limitedConn{Conn: conn, slots: l.slots}, nil
 }
 
 func (l *limitedListener) Close() error {
@@ -171,12 +163,12 @@ func (l *limitedListener) Close() error {
 
 type limitedConn struct {
 	net.Conn
-	once    sync.Once
-	release func()
+	once  sync.Once
+	slots chan struct{} // the listener's token channel
 }
 
 func (c *limitedConn) Close() error {
 	err := c.Conn.Close()
-	c.once.Do(c.release)
+	c.once.Do(func() { <-c.slots })
 	return err
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"net"
 	"net/url"
@@ -23,19 +24,13 @@ func Parse(getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf("environment lookup is required")
 	}
 	config := Config{
-		ListenAddress:    valueOrDefault(getenv, "PERPETUAL_LISTEN_ADDRESS", "127.0.0.1:7777"),
-		RuntimeDir:       valueOrDefault(getenv, "PERPETUAL_RUNTIME_DIR", "/run/perpetual"),
-		MaxConnections:   128,
-		MaxJobs:          128,
-		QueueSize:        128,
-		Workers:          4,
-		PoolConnections:  8,
+		DatabaseURL:      getenv("PERPETUAL_DATABASE_URL"),
+		ListenAddress:    cmp.Or(getenv("PERPETUAL_LISTEN_ADDRESS"), "127.0.0.1:7777"),
+		RuntimeDir:       cmp.Or(getenv("PERPETUAL_RUNTIME_DIR"), "/run/perpetual"),
 		LockTimeout:      time.Second,
 		StatementTimeout: 5 * time.Second,
 		OperationTimeout: 8 * time.Second,
 		ShutdownGrace:    10 * time.Second,
-		MaxRegistrations: 1024,
-		DatabaseURL:      valueOrDefault(getenv, "PERPETUAL_DATABASE_URL", ""),
 	}
 	if config.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("PERPETUAL_DATABASE_URL is required")
@@ -51,23 +46,24 @@ func Parse(getenv func(string) string) (Config, error) {
 	}
 
 	var err error
-	if config.MaxRegistrations, err = parseCount(getenv, "PERPETUAL_MAX_REGISTRATIONS", 1024, 1024); err != nil {
+	// Each ceiling is both the default and the maximum: the environment may
+	// only lower these bounds.
+	if config.MaxRegistrations, err = parseCount(getenv, "PERPETUAL_MAX_REGISTRATIONS", 1024); err != nil {
 		return Config{}, err
 	}
 	counts := []struct {
 		key     string
-		initial int
-		maximum int
+		ceiling int
 		target  *int
 	}{
-		{"PERPETUAL_MAX_CONNECTIONS", 128, 128, &config.MaxConnections},
-		{"PERPETUAL_MAX_JOBS", 128, 128, &config.MaxJobs},
-		{"PERPETUAL_QUEUE_SIZE", 128, 128, &config.QueueSize},
-		{"PERPETUAL_WORKERS", 4, 4, &config.Workers},
-		{"PERPETUAL_POOL_CONNECTIONS", 8, 8, &config.PoolConnections},
+		{"PERPETUAL_MAX_CONNECTIONS", 128, &config.MaxConnections},
+		{"PERPETUAL_MAX_JOBS", 128, &config.MaxJobs},
+		{"PERPETUAL_QUEUE_SIZE", 128, &config.QueueSize},
+		{"PERPETUAL_WORKERS", 4, &config.Workers},
+		{"PERPETUAL_POOL_CONNECTIONS", 8, &config.PoolConnections},
 	}
 	for _, field := range counts {
-		value, err := parseCount(getenv, field.key, uint64(field.initial), uint64(field.maximum))
+		value, err := parseCount(getenv, field.key, uint64(field.ceiling))
 		if err != nil {
 			return Config{}, err
 		}
@@ -103,21 +99,15 @@ func Parse(getenv func(string) string) (Config, error) {
 	return config, nil
 }
 
-func valueOrDefault(getenv func(string) string, key, fallback string) string {
-	if value := getenv(key); value != "" {
-		return value
-	}
-	return fallback
-}
-
-func parseCount(getenv func(string) string, key string, fallback, maximum uint64) (uint64, error) {
+// parseCount returns ceiling when key is unset and otherwise accepts 1..ceiling.
+func parseCount(getenv func(string) string, key string, ceiling uint64) (uint64, error) {
 	value := getenv(key)
 	if value == "" {
-		return fallback, nil
+		return ceiling, nil
 	}
 	parsed, err := strconv.ParseUint(value, 10, 64)
-	if err != nil || parsed == 0 || parsed > maximum {
-		return 0, fmt.Errorf("%s must be between 1 and %d", key, maximum)
+	if err != nil || parsed == 0 || parsed > ceiling {
+		return 0, fmt.Errorf("%s must be between 1 and %d", key, ceiling)
 	}
 	return parsed, nil
 }

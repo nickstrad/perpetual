@@ -3,8 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,10 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"perpetual/internal/httpapi"
 	"perpetual/internal/registration"
 )
-
-const maxResponseBytes = 16 * 1024
 
 type Options struct {
 	Client       *http.Client
@@ -26,31 +23,19 @@ type Options struct {
 	NewRequestID func() (registration.RequestID, error)
 }
 
-type registrationResponse struct {
-	RequestID   registration.RequestID  `json:"request_id"`
-	MachineID   registration.MachineID  `json:"machine_id"`
-	State       string                  `json:"state"`
-	Provisioned *bool                   `json:"provisioned"`
-	Parameters  registration.Parameters `json:"parameters"`
-	CreatedAt   time.Time               `json:"created_at"`
-}
-
-type errorResponse struct {
-	Error struct {
-		Code string `json:"code"`
-	} `json:"error"`
-}
-
 // Run parses one CLI command, performs at most one HTTP request, and returns
 // the documented process exit code. It has no process-global I/O or config.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, options Options) int {
-	if ctx == nil || stdout == nil || stderr == nil {
+	if stderr == nil {
+		return 5 // there is nowhere to report the failure
+	}
+	if ctx == nil || stdout == nil {
 		return report(stderr, 5, "CLI requires a context and output streams")
 	}
 	if len(args) >= 2 && args[0] == "machine" && args[1] == "register" {
 		return runRegister(ctx, args[2:], stdout, stderr, options)
 	}
-	if len(args) == 3 && args[1] == "inspect" && (args[0] == "registration" || args[0] == "machine") {
+	if len(args) == 3 && args[1] == "inspect" {
 		return runInspect(ctx, args[0], args[2], stdout, stderr, options)
 	}
 	return report(stderr, 2, "invalid command")
@@ -116,16 +101,16 @@ func runRegister(ctx context.Context, args []string, stdout, stderr io.Writer, o
 	request.Header.Set("Accept", "application/json")
 	response, err := clientFor(options).Do(request)
 	if err != nil {
-		return report(stderr, 6, "registration result is unknown; inspect or retry request ID %s: %v", requestID, err)
+		return reportUnknown(stderr, requestID, err)
 	}
 	defer response.Body.Close()
 	responseBody, err := readBounded(response.Body)
 	if err != nil {
-		return report(stderr, 6, "registration result is unknown for request ID %s", requestID)
+		return reportUnknown(stderr, requestID, err)
 	}
 	if response.StatusCode == http.StatusOK || response.StatusCode == http.StatusCreated {
 		if err := validateRegistrationResponse(responseBody, requestID, "", &parameters); err != nil {
-			return report(stderr, 6, "registration result is unknown; inspect or retry request ID %s: %v", requestID, err)
+			return reportUnknown(stderr, requestID, err)
 		}
 		if err := writeJSONLine(stdout, responseBody); err != nil {
 			return report(stderr, 5, "could not write registration response: %v", err)
@@ -136,15 +121,28 @@ func runRegister(ctx context.Context, args []string, stdout, stderr io.Writer, o
 }
 
 func runInspect(ctx context.Context, kind, identifier string, stdout, stderr io.Writer, options Options) int {
-	if kind == "registration" {
+	// The kind decides the route, the identifier syntax, and which identity
+	// the response must echo. Only that expected identity is set.
+	var collection string
+	var expectedRequest registration.RequestID
+	var expectedMachine registration.MachineID
+	switch kind {
+	case "registration":
 		if err := registration.ValidateRequestID(identifier); err != nil {
 			return report(stderr, 2, "invalid request ID: %v", err)
 		}
-	} else if err := registration.ValidateMachineID(identifier); err != nil {
-		return report(stderr, 2, "invalid machine ID: %v", err)
+		collection = "registrations"
+		expectedRequest = registration.RequestID(identifier)
+	case "machine":
+		if err := registration.ValidateMachineID(identifier); err != nil {
+			return report(stderr, 2, "invalid machine ID: %v", err)
+		}
+		collection = "machines"
+		expectedMachine = registration.MachineID(identifier)
+	default:
+		return report(stderr, 2, "invalid command")
 	}
-	plural := kind + "s"
-	endpoint, err := endpointURL(options.BaseURL, "/v1/"+plural+"/"+identifier)
+	endpoint, err := endpointURL(options.BaseURL, "/v1/"+collection+"/"+identifier)
 	if err != nil {
 		return report(stderr, 5, "invalid control-plane URL: %v", err)
 	}
@@ -163,13 +161,6 @@ func runInspect(ctx context.Context, kind, identifier string, stdout, stderr io.
 		return report(stderr, 5, "invalid control-plane response: %v", err)
 	}
 	if response.StatusCode == http.StatusOK {
-		var expectedRequest registration.RequestID
-		var expectedMachine registration.MachineID
-		if kind == "registration" {
-			expectedRequest = registration.RequestID(identifier)
-		} else {
-			expectedMachine = registration.MachineID(identifier)
-		}
 		if err := validateRegistrationResponse(responseBody, expectedRequest, expectedMachine, nil); err != nil {
 			return report(stderr, 5, "invalid control-plane response: %v", err)
 		}
@@ -206,18 +197,18 @@ func endpointURL(baseURL, path string) (string, error) {
 }
 
 func readBounded(reader io.Reader) ([]byte, error) {
-	body, err := io.ReadAll(io.LimitReader(reader, maxResponseBytes+1))
+	body, err := io.ReadAll(io.LimitReader(reader, httpapi.MaxResponseBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(body) > maxResponseBytes {
-		return nil, fmt.Errorf("response exceeds %d bytes", maxResponseBytes)
+	if len(body) > httpapi.MaxResponseBytes {
+		return nil, fmt.Errorf("response exceeds %d bytes", httpapi.MaxResponseBytes)
 	}
 	return body, nil
 }
 
 func validateRegistrationResponse(body []byte, expectedRequestID registration.RequestID, expectedMachineID registration.MachineID, expectedParameters *registration.Parameters) error {
-	var response registrationResponse
+	var response httpapi.RegistrationResponse
 	if err := json.Unmarshal(body, &response); err != nil {
 		return fmt.Errorf("response is not a registration object")
 	}
@@ -249,13 +240,14 @@ func validateRegistrationResponse(body []byte, expectedRequestID registration.Re
 }
 
 func mapErrorResponse(status int, body []byte, mutation bool, requestID registration.RequestID, stderr io.Writer) int {
-	var response errorResponse
+	var response httpapi.ErrorResponse
 	decodeErr := json.Unmarshal(body, &response)
 	code := response.Error.Code
 	// Only a recognized service rejection establishes a known mutation result.
-	// A proxy or malformed response cannot prove that the operation did not commit.
+	// A proxy or malformed response cannot prove that the operation did not
+	// commit, and outcome_unknown says so explicitly.
 	if mutation && (decodeErr != nil || !knownMutationRejection(status, code)) {
-		return report(stderr, 6, "registration result is unknown; inspect or retry request ID %s", requestID)
+		return reportUnknown(stderr, requestID, nil)
 	}
 	exitCode := 5
 	switch status {
@@ -265,15 +257,6 @@ func mapErrorResponse(status int, body []byte, mutation bool, requestID registra
 		exitCode = 3
 	case http.StatusNotFound:
 		exitCode = 4
-	case http.StatusTooManyRequests:
-		exitCode = 5
-	case http.StatusServiceUnavailable:
-		if mutation && code == "outcome_unknown" {
-			exitCode = 6
-		}
-	}
-	if mutation && exitCode == 6 {
-		return report(stderr, exitCode, "registration result is unknown; inspect or retry request ID %s", requestID)
 	}
 	if code == "" {
 		return report(stderr, exitCode, "control plane returned HTTP %d", status)
@@ -284,13 +267,13 @@ func mapErrorResponse(status int, body []byte, mutation bool, requestID registra
 func knownMutationRejection(status int, code string) bool {
 	switch status {
 	case http.StatusBadRequest:
-		return code == "invalid_request"
+		return code == httpapi.CodeInvalidRequest
 	case http.StatusConflict:
-		return code == "request_conflict" || code == "name_conflict"
+		return code == httpapi.CodeRequestConflict || code == httpapi.CodeNameConflict
 	case http.StatusTooManyRequests:
-		return code == "registration_capacity"
+		return code == httpapi.CodeRegistrationCapacity
 	case http.StatusServiceUnavailable:
-		return code == "busy" || code == "unavailable"
+		return code == httpapi.CodeBusy || code == httpapi.CodeUnavailable
 	default:
 		return false
 	}
@@ -298,7 +281,8 @@ func knownMutationRejection(status int, code string) bool {
 
 func writeJSONLine(writer io.Writer, body []byte) error {
 	trimmed := bytes.TrimSpace(body)
-	if len(trimmed) == 0 || trimmed[0] != '{' || !json.Valid(trimmed) {
+	// Callers already unmarshalled these bytes; this guards the stdout shape.
+	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return fmt.Errorf("response is not one JSON object")
 	}
 	if _, err := writer.Write(trimmed); err != nil {
@@ -309,19 +293,20 @@ func writeJSONLine(writer io.Writer, body []byte) error {
 }
 
 func report(stderr io.Writer, code int, format string, args ...any) int {
-	if stderr != nil {
-		_, _ = fmt.Fprintf(stderr, format+"\n", args...)
-	}
+	_, _ = fmt.Fprintf(stderr, format+"\n", args...)
 	return code
 }
 
-func randomRequestID() (registration.RequestID, error) {
-	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
+// reportUnknown reports a registration whose commit cannot be ruled out. The
+// request ID lets the operator inspect or retry the same registration safely.
+func reportUnknown(stderr io.Writer, requestID registration.RequestID, cause error) int {
+	if cause == nil {
+		return report(stderr, 6, "registration result is unknown; inspect or retry request ID %s", requestID)
 	}
-	raw[6] = (raw[6] & 0x0f) | 0x40
-	raw[8] = (raw[8] & 0x3f) | 0x80
-	encoded := hex.EncodeToString(raw[:])
-	return registration.RequestID(encoded[:8] + "-" + encoded[8:12] + "-" + encoded[12:16] + "-" + encoded[16:20] + "-" + encoded[20:]), nil
+	return report(stderr, 6, "registration result is unknown; inspect or retry request ID %s: %v", requestID, cause)
+}
+
+func randomRequestID() (registration.RequestID, error) {
+	id, err := registration.NewRandomID()
+	return registration.RequestID(id), err
 }

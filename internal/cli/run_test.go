@@ -117,7 +117,7 @@ func TestT06CLIRejectsInvalidBeforeSend(t *testing.T) {
 		t.Error("invalid command sent request")
 		return nil, errors.New("unexpected")
 	})}
-	for _, args := range [][]string{{}, {"machine", "register"}, {"machine", "register", "--name", "A", "--image", "base", "--request-id", id}, {"machine", "register", "--name", "a", "--image", "base", "--vcpus", "4294967297", "--request-id", id}, {"registration", "inspect", "bad"}, {"machine", "register", "--request-id", "bad", "--name", "a", "--image", "base"}, {"machine", "register", "--unknown", "x"}} {
+	for _, args := range [][]string{{}, {"machine", "register"}, {"machine", "register", "--name", "A", "--image", "base", "--request-id", id}, {"machine", "register", "--name", "a", "--image", "base", "--vcpus", "4294967297", "--request-id", id}, {"registration", "inspect", "bad"}, {"widget", "inspect", id}, {"machine", "register", "--request-id", "bad", "--name", "a", "--image", "base"}, {"machine", "register", "--unknown", "x"}} {
 		var out, errout bytes.Buffer
 		if code := Run(context.Background(), args, &out, &errout, Options{Client: client, BaseURL: "http://example.invalid"}); code != 2 {
 			t.Errorf("args=%v exit=%d", args, code)

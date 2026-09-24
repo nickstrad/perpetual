@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,9 +9,51 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"perpetual/internal/registration"
 )
+
+// The wire schema below is shared with the CLI, which decodes these same types.
+
+// MaxResponseBytes bounds every response body, including its trailing newline.
+const MaxResponseBytes = 16 << 10
+
+// Error codes carried in ErrorBody.Code.
+const (
+	CodeInvalidRequest       = "invalid_request"
+	CodeRequestConflict      = "request_conflict"
+	CodeNameConflict         = "name_conflict"
+	CodeRegistrationCapacity = "registration_capacity"
+	CodeBusy                 = "busy"
+	CodeUnavailable          = "unavailable"
+	CodeOutcomeUnknown       = "outcome_unknown"
+	CodeNotFound             = "not_found"
+)
+
+// RegistrationResponse is the body of a successful registration or inspection.
+// CreatedAt marshals as RFC 3339 with trimmed nanoseconds (time.RFC3339Nano).
+type RegistrationResponse struct {
+	RequestID registration.RequestID `json:"request_id"`
+	MachineID registration.MachineID `json:"machine_id"`
+	State     string                 `json:"state"`
+	// Provisioned is a pointer so a client can reject a missing or null field
+	// instead of reading it as false.
+	Provisioned *bool                   `json:"provisioned"`
+	Parameters  registration.Parameters `json:"parameters"`
+	CreatedAt   time.Time               `json:"created_at"`
+}
+
+type ErrorResponse struct {
+	Error ErrorBody `json:"error"`
+}
+
+type ErrorBody struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	// RequestID is set only for outcome_unknown, so the caller can inspect or retry.
+	RequestID string `json:"request_id,omitempty"`
+}
 
 type Service interface {
 	Register(context.Context, registration.Request) registration.Outcome
@@ -23,7 +64,6 @@ type Service interface {
 
 type Options struct {
 	NewMachineID func() (registration.MachineID, error)
-	Fatal        func(any)
 }
 
 type Server struct {
@@ -40,23 +80,18 @@ func New(service Service, options Options) *Server {
 }
 
 func randomMachineID() (registration.MachineID, error) {
-	var id [16]byte
-	if _, err := rand.Read(id[:]); err != nil {
-		return "", err
-	}
-	id[6] = (id[6] & 0x0f) | 0x40
-	id[8] = (id[8] & 0x3f) | 0x80
-	return registration.MachineID(fmt.Sprintf("%x-%x-%x-%x-%x", id[:4], id[4:6], id[6:8], id[8:10], id[10:])), nil
+	id, err := registration.NewRandomID()
+	return registration.MachineID(id), err
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/healthz" {
 		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "invalid_request", "method not allowed", "")
+			methodNotAllowed(w)
 			return
 		}
 		if err := s.service.Health(r.Context()); err != nil {
-			writeError(w, http.StatusServiceUnavailable, "unavailable", "service unavailable", "")
+			writeError(w, http.StatusServiceUnavailable, CodeUnavailable, "service unavailable", "")
 			return
 		}
 		writeJSON(w, http.StatusOK, struct {
@@ -66,7 +101,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if raw, ok := pathID(r.URL.Path, "/v1/registrations/"); ok {
 		if err := registration.ValidateRequestID(raw); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "invalid request ID", "")
+			writeError(w, http.StatusBadRequest, CodeInvalidRequest, "invalid request ID", "")
 			return
 		}
 		id := registration.RequestID(raw)
@@ -77,53 +112,55 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			record, found, err := s.service.InspectRequest(r.Context(), id)
 			writeInspection(w, record, found, err)
 		default:
-			writeError(w, http.StatusMethodNotAllowed, "invalid_request", "method not allowed", "")
+			methodNotAllowed(w)
 		}
 		return
 	}
 	if raw, ok := pathID(r.URL.Path, "/v1/machines/"); ok {
 		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "invalid_request", "method not allowed", "")
+			methodNotAllowed(w)
 			return
 		}
 		if err := registration.ValidateMachineID(raw); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "invalid machine ID", "")
+			writeError(w, http.StatusBadRequest, CodeInvalidRequest, "invalid machine ID", "")
 			return
 		}
 		record, found, err := s.service.InspectMachine(r.Context(), registration.MachineID(raw))
 		writeInspection(w, record, found, err)
 		return
 	}
-	writeError(w, http.StatusNotFound, "not_found", "route not found", "")
+	writeError(w, http.StatusNotFound, CodeNotFound, "route not found", "")
 }
 
 func pathID(path, prefix string) (string, bool) {
-	if !strings.HasPrefix(path, prefix) {
+	raw, found := strings.CutPrefix(path, prefix)
+	if !found {
 		return "", false
 	}
-	raw := strings.TrimPrefix(path, prefix)
 	return raw, raw != "" && !strings.Contains(raw, "/")
 }
 
+// put decodes the body syntactically; registration.NewRequest is the single
+// semantic validator for identifiers and parameters.
 func (s *Server) put(w http.ResponseWriter, r *http.Request, id registration.RequestID) {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "content type must be application/json", "")
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "content type must be application/json", "")
 		return
 	}
 	parameters, err := DecodeRegistration(r.Body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "invalid registration body", "")
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "invalid registration body", "")
 		return
 	}
 	candidate, err := s.newID()
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "unavailable", "identity generation failed", "")
+		writeError(w, http.StatusServiceUnavailable, CodeUnavailable, "identity generation failed", "")
 		return
 	}
 	request, err := registration.NewRequest(id, candidate, parameters)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "invalid registration request", "")
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "invalid registration request", "")
 		return
 	}
 	outcome := s.service.Register(r.Context(), request)
@@ -133,17 +170,17 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request, id registration.Req
 	case registration.OutcomeExisting:
 		writeRecord(w, http.StatusOK, outcome.Record)
 	case registration.OutcomeRequestConflict:
-		writeError(w, http.StatusConflict, "request_conflict", "request ID already owns different parameters", "")
+		writeError(w, http.StatusConflict, CodeRequestConflict, "request ID already owns different parameters", "")
 	case registration.OutcomeNameConflict:
-		writeError(w, http.StatusConflict, "name_conflict", "machine name is already registered", "")
+		writeError(w, http.StatusConflict, CodeNameConflict, "machine name is already registered", "")
 	case registration.OutcomeCapacity:
-		writeError(w, http.StatusTooManyRequests, "registration_capacity", "registration capacity reached", "")
+		writeError(w, http.StatusTooManyRequests, CodeRegistrationCapacity, "registration capacity reached", "")
 	case registration.OutcomeBusy:
-		writeError(w, http.StatusServiceUnavailable, "busy", "registration service busy", "")
+		writeError(w, http.StatusServiceUnavailable, CodeBusy, "registration service busy", "")
 	case registration.OutcomeUnavailable:
-		writeError(w, http.StatusServiceUnavailable, "unavailable", "registration service unavailable", "")
+		writeError(w, http.StatusServiceUnavailable, CodeUnavailable, "registration service unavailable", "")
 	case registration.OutcomeUnknown:
-		writeError(w, http.StatusServiceUnavailable, "outcome_unknown", "registration may have committed; inspect or retry with the same request ID and parameters", string(id))
+		writeError(w, http.StatusServiceUnavailable, CodeOutcomeUnknown, "registration may have committed; inspect or retry with the same request ID and parameters", string(id))
 	default:
 		panic(fmt.Sprintf("unexpected registration outcome %d", outcome.Kind))
 	}
@@ -151,42 +188,34 @@ func (s *Server) put(w http.ResponseWriter, r *http.Request, id registration.Req
 
 func writeInspection(w http.ResponseWriter, record registration.Record, found bool, err error) {
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, "unavailable", "inspection unavailable", "")
+		writeError(w, http.StatusServiceUnavailable, CodeUnavailable, "inspection unavailable", "")
 		return
 	}
 	if !found {
-		writeError(w, http.StatusNotFound, "not_found", "registration not observed", "")
+		writeError(w, http.StatusNotFound, CodeNotFound, "registration not observed", "")
 		return
 	}
 	writeRecord(w, http.StatusOK, record)
 }
 
 func writeRecord(w http.ResponseWriter, status int, record registration.Record) {
-	writeJSON(w, status, struct {
-		RequestID   registration.RequestID  `json:"request_id"`
-		MachineID   registration.MachineID  `json:"machine_id"`
-		State       string                  `json:"state"`
-		Provisioned bool                    `json:"provisioned"`
-		Parameters  registration.Parameters `json:"parameters"`
-		CreatedAt   string                  `json:"created_at"`
-	}{
-		RequestID: record.RequestID, MachineID: record.MachineID, State: "registered",
-		Provisioned: false, Parameters: record.Parameters, CreatedAt: record.CreatedAt.Format("2006-01-02T15:04:05.999999999Z07:00"),
+	provisioned := false // this slice registers intent only; nothing is provisioned yet
+	writeJSON(w, status, RegistrationResponse{
+		RequestID:   record.RequestID,
+		MachineID:   record.MachineID,
+		State:       "registered",
+		Provisioned: &provisioned,
+		Parameters:  record.Parameters,
+		CreatedAt:   record.CreatedAt,
 	})
 }
 
+func methodNotAllowed(w http.ResponseWriter) {
+	writeError(w, http.StatusMethodNotAllowed, CodeInvalidRequest, "method not allowed", "")
+}
+
 func writeError(w http.ResponseWriter, status int, code, message, requestID string) {
-	writeJSON(w, status, struct {
-		Error struct {
-			Code      string `json:"code"`
-			Message   string `json:"message"`
-			RequestID string `json:"request_id,omitempty"`
-		} `json:"error"`
-	}{Error: struct {
-		Code      string `json:"code"`
-		Message   string `json:"message"`
-		RequestID string `json:"request_id,omitempty"`
-	}{Code: code, Message: message, RequestID: requestID}})
+	writeJSON(w, status, ErrorResponse{Error: ErrorBody{Code: code, Message: message, RequestID: requestID}})
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -194,7 +223,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	if err != nil {
 		panic(err)
 	}
-	if len(encoded)+1 > 16<<10 {
+	if len(encoded)+1 > MaxResponseBytes {
 		panic("registration response exceeds bound")
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -205,13 +234,12 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 // FatalHandler prevents net/http's normal panic recovery from keeping a
-// potentially corrupted service alive. The callback is used by subprocess
-// tests; a returning callback still cannot resume request handling.
+// potentially corrupted service alive. The callback reports the panic and is
+// replaceable by subprocess tests; the process exits after it regardless.
 func FatalHandler(handler http.Handler, fatal func(any)) http.Handler {
 	if fatal == nil {
 		fatal = func(value any) {
 			fmt.Fprintf(os.Stderr, "fatal HTTP panic: %v\n", value)
-			os.Exit(1)
 		}
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

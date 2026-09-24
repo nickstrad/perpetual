@@ -44,12 +44,20 @@ func (s *Store) Migrate(ctx context.Context) error {
 	)`); err != nil {
 		return fmt.Errorf("create migration history: %w", err)
 	}
-	var version int64
-	var checksum string
-	err = tx.QueryRow(ctx, "SELECT version,checksum FROM schema_migrations").Scan(&version, &checksum)
+	// LIMIT 2 bounds the read: one row is the supported state, and any second
+	// row is already an unsupported history.
+	rows, err := tx.Query(ctx, "SELECT version,checksum FROM schema_migrations ORDER BY version LIMIT 2")
+	if err != nil {
+		return fmt.Errorf("read migration history: %w", err)
+	}
+	history, err := pgx.CollectRows(rows, scanAppliedMigration)
+	if err != nil {
+		return fmt.Errorf("read migration history: %w", err)
+	}
 	expected := sha256.Sum256([]byte(migrationSQL))
 	expectedChecksum := hex.EncodeToString(expected[:])
-	if errors.Is(err, pgx.ErrNoRows) {
+	switch len(history) {
+	case 0:
 		if _, err := tx.Exec(ctx, migrationSQL); err != nil {
 			return fmt.Errorf("apply registration schema: %w", err)
 		}
@@ -59,30 +67,24 @@ func (s *Store) Migrate(ctx context.Context) error {
 		if _, err := tx.Exec(ctx, "INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)", migrationVersion, expectedChecksum); err != nil {
 			return fmt.Errorf("record registration schema: %w", err)
 		}
-	} else if err != nil {
-		return fmt.Errorf("read migration history: %w", err)
-	} else if version != migrationVersion || checksum != expectedChecksum {
-		return fmt.Errorf("unsupported registration schema version or checksum")
-	}
-	var versions int64
-	if err := tx.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&versions); err != nil {
-		return fmt.Errorf("count migration versions: %w", err)
-	}
-	if versions != 1 {
+	case 1:
+		if history[0].version != migrationVersion || history[0].checksum != expectedChecksum {
+			return fmt.Errorf("unsupported registration schema version or checksum")
+		}
+	default:
 		return fmt.Errorf("unsupported additional registration schema version")
 	}
-	var used, limit, rows int64
-	err = tx.QueryRow(ctx, "SELECT used,max_registrations FROM registration_gate WHERE singleton_id=1 FOR UPDATE").Scan(&used, &limit)
+	used, limit, err := lockGate(ctx, tx)
 	if err != nil {
 		return fmt.Errorf("verify registration gate: %w", err)
 	}
 	// Read Committed takes a new snapshot for this statement. A previous
 	// service may have committed while we waited to lock the gate.
-	if err := tx.QueryRow(ctx, "SELECT count(*) FROM machine_registrations").Scan(&rows); err != nil {
+	var registrations int64
+	if err := tx.QueryRow(ctx, "SELECT count(*) FROM machine_registrations").Scan(&registrations); err != nil {
 		return fmt.Errorf("count committed registrations: %w", err)
 	}
-	invariant.Check(used >= 0 && limit > 0 && used <= limit, "registration gate count or limit invalid")
-	invariant.Check(used == rows, "registration gate count differs from rows")
+	invariant.Check(used == registrations, "registration gate count differs from rows")
 	if limit != int64(s.options.MaxRegistrations) {
 		return fmt.Errorf("configured registration limit differs from database")
 	}
@@ -90,6 +92,17 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return fmt.Errorf("commit migration verification: %w", err)
 	}
 	return nil
+}
+
+type appliedMigration struct {
+	version  int64
+	checksum string
+}
+
+func scanAppliedMigration(row pgx.CollectableRow) (appliedMigration, error) {
+	var applied appliedMigration
+	err := row.Scan(&applied.version, &applied.checksum)
+	return applied, err
 }
 
 func setLocalTimeouts(ctx context.Context, tx pgx.Tx, options Options) error {

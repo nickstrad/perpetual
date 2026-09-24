@@ -68,7 +68,7 @@ func NewService(store Store, options ServiceOptions) (*Coordinator, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Coordinator{
 		store: store, options: options, input: make(chan registrationJob, options.QueueSize),
-		work: make(chan reservationWork), done: make(chan completedJob, options.Workers),
+		work: make(chan reservationWork, options.MaxJobs), done: make(chan completedJob, options.Workers),
 		stop: make(chan struct{}), stopped: make(chan struct{}), slots: make(chan struct{}, options.MaxJobs),
 		ctx: ctx, cancel: cancel,
 	}
@@ -81,9 +81,6 @@ func NewService(store Store, options ServiceOptions) (*Coordinator, error) {
 }
 
 func (s *Coordinator) Register(ctx context.Context, request Request) Outcome {
-	if ctx.Err() != nil {
-		return Outcome{Kind: OutcomeUnavailable}
-	}
 	job := registrationJob{request: request, reply: make(chan Outcome, 1)}
 	s.mu.Lock()
 	if ctx.Err() != nil {
@@ -137,7 +134,6 @@ func (s *Coordinator) worker() {
 func (s *Coordinator) run() {
 	defer close(s.stopped)
 	active := make(map[EffectID]activeJob, s.options.MaxJobs)
-	pending := make([]reservationWork, 0, s.options.MaxJobs)
 	var sequence uint64
 	stopping := false
 	stop := s.stop
@@ -146,12 +142,6 @@ func (s *Coordinator) run() {
 			close(s.work)
 			s.workers.Wait()
 			return
-		}
-		var dispatch chan reservationWork
-		var next reservationWork
-		if len(pending) > 0 {
-			dispatch = s.work
-			next = pending[0]
 		}
 		select {
 		case job := <-s.input:
@@ -163,13 +153,16 @@ func (s *Coordinator) run() {
 			reserve, ok := effects[0].(Reserve)
 			invariant.Check(ok, "submit requested unexpected effect")
 			active[id] = activeJob{state: state, reply: job.reply}
-			pending = append(pending, reservationWork{effect: reserve, deadline: job.deadline})
-		case dispatch <- next:
-			pending = pending[1:]
-		case completed := <-s.done:
-			if !IsCurrentEpoch(s.options.Epoch, completed.id) {
-				continue // a completion from a prior service instance has no owner here
+			// Each queued item holds one of MaxJobs slots until its completion is
+			// handled, so this buffer of MaxJobs can never be full here.
+			select {
+			case s.work <- reservationWork{effect: reserve, deadline: job.deadline}:
+			default:
+				invariant.Fail("work queue exceeded job slots")
 			}
+		case completed := <-s.done:
+			// Only this coordinator's workers feed s.done, with this epoch's IDs.
+			invariant.Check(IsCurrentEpoch(s.options.Epoch, completed.id), "completion from another epoch")
 			job, ok := active[completed.id]
 			invariant.Check(ok, "completion for unknown effect")
 			_, effects := Step(job.state, Completed{EffectID: completed.id, Outcome: completed.outcome})

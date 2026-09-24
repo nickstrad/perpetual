@@ -6,6 +6,12 @@ func (v Violation) Error() string { return v.Message }
 
 func Check(condition bool, message string) {
 	if !condition {
-		panic(Violation{Message: message})
+		Fail(message)
 	}
+}
+
+// Fail reports a violated invariant unconditionally. Use it where a code path
+// itself is the violation, instead of Check(false, ...).
+func Fail(message string) {
+	panic(Violation{Message: message})
 }

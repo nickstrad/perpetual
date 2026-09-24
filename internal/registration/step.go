@@ -33,7 +33,7 @@ func Step(state State, event Event) (State, []Effect) {
 		next.Outcome = event.Outcome
 		return next, []Effect{Reply{Outcome: event.Outcome}}
 	default:
-		invariant.Check(false, "unsupported registration event")
+		invariant.Fail("unsupported registration event")
 		return state, nil
 	}
 }

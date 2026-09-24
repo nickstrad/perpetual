@@ -123,8 +123,37 @@ func TestT06HTTPOutcomes(t *testing.T) {
 		})
 	}
 }
+
+// The response schema is a shared type whose CreatedAt is a time.Time. These
+// literals were written by hand for the RFC 3339 layout with trimmed
+// nanoseconds ("2006-01-02T15:04:05.999999999Z07:00") that the server
+// formatted explicitly before the type was shared.
+func TestT06HTTPRecordBytes(t *testing.T) {
+	const utc = `{"request_id":"` + rid + `","machine_id":"` + mid + `","state":"registered","provisioned":false,` +
+		`"parameters":{"name":"demo-a","image":"base","vcpus":1,"memory_mib":512,"disk_mib":1024},` +
+		`"created_at":"2026-09-23T00:00:00Z"}` + "\n"
+	fractional := record()
+	// 450,000,000 ns trims to ".45"; a -7h fixed zone prints as "-07:00".
+	fractional.CreatedAt = time.Date(2026, 9, 23, 1, 2, 3, 450000000, time.FixedZone("", -7*60*60))
+	for _, c := range []struct {
+		record registration.Record
+		want   string
+	}{
+		{record(), utc},
+		{fractional, strings.Replace(utc, "2026-09-23T00:00:00Z", "2026-09-23T01:02:03.45-07:00", 1)},
+	} {
+		s := &fakeService{record: c.record, found: true}
+		w := httptest.NewRecorder()
+		handler(s).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/registrations/"+rid, nil))
+		if w.Code != http.StatusOK || w.Body.String() != c.want {
+			t.Errorf("status=%d body=%q want %q", w.Code, w.Body.String(), c.want)
+		}
+	}
+}
 func TestT06HTTPInvalidHasNoEffects(t *testing.T) {
-	for _, c := range []struct{ path, body, content string }{{"/v1/registrations/bad", validBody, "application/json"}, {"/v1/registrations/" + rid, "{}", "application/json"}, {"/v1/registrations/" + rid, validBody, "text/plain"}, {"/v1/registrations/" + rid, strings.Repeat("x", 4097), "application/json"}} {
+	// The last case is well-formed JSON with an invalid name: the decoder is
+	// syntactic only, so registration.NewRequest must reject it before Register.
+	for _, c := range []struct{ path, body, content string }{{"/v1/registrations/bad", validBody, "application/json"}, {"/v1/registrations/" + rid, "{}", "application/json"}, {"/v1/registrations/" + rid, validBody, "text/plain"}, {"/v1/registrations/" + rid, strings.Repeat("x", 4097), "application/json"}, {"/v1/registrations/" + rid, strings.Replace(validBody, `"name":"demo-a"`, `"name":"A"`, 1), "application/json"}} {
 		s := &fakeService{}
 		req := httptest.NewRequest("PUT", c.path, strings.NewReader(c.body))
 		req.Header.Set("Content-Type", c.content)
@@ -184,19 +213,36 @@ func TestT02WireCanonicalEquivalence(t *testing.T) {
 		t.Fatal("wire order changed fingerprint")
 	}
 }
+
+// FuzzDecodeRegistration drives arbitrary bodies through the PUT handler.
+// DecodeRegistration is syntactic only, so the domain property lives at the
+// HTTP boundary: a body either reaches Register once with valid parameters, or
+// is rejected as invalid_request with no mutation.
 func FuzzDecodeRegistration(f *testing.F) {
-	for _, s := range []string{"", validBody, "null", validBody + validBody, `{"name":null}`} {
+	for _, s := range []string{"", validBody, "null", validBody + validBody, `{"name":null}`, strings.Replace(validBody, `"name":"demo-a"`, `"name":"A"`, 1)} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
 		if len(s) > 8192 {
 			s = s[:8192]
 		}
-		p, err := DecodeRegistration(strings.NewReader(s))
-		if err == nil {
-			if err := registration.ValidateParameters(p); err != nil {
-				t.Fatalf("decoder accepted invalid domain: %v", err)
+		service := &fakeService{outcome: registration.Outcome{Kind: registration.OutcomeCreated, Record: record()}}
+		req := httptest.NewRequest(http.MethodPut, "/v1/registrations/"+rid, strings.NewReader(s))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler(service).ServeHTTP(w, req)
+		switch {
+		case service.calls == 1 && w.Code == http.StatusCreated:
+			if err := registration.ValidateParameters(service.request.Parameters); err != nil {
+				t.Fatalf("handler dispatched invalid domain: %v", err)
 			}
+		case service.calls == 0 && w.Code == http.StatusBadRequest:
+			var body ErrorResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.Error.Code != CodeInvalidRequest {
+				t.Fatalf("rejection envelope=%s", w.Body)
+			}
+		default:
+			t.Fatalf("status=%d calls=%d", w.Code, service.calls)
 		}
 	})
 }
@@ -230,7 +276,7 @@ func TestT01WireErrorExits(t *testing.T) {
 			t.Errorf("missing field accepted: %s", field)
 		}
 	}
-	for _, body := range []string{`{"name":`, validBody[:len(validBody)-1], strings.Replace(validBody, `"name":"demo-a"`, `"name":42`, 1), strings.Replace(validBody, `"image":"base"`, `"image":[]`, 1), strings.Replace(validBody, `"name":"demo-a"`, `"name":"A"`, 1)} {
+	for _, body := range []string{`{"name":`, validBody[:len(validBody)-1], strings.Replace(validBody, `"name":"demo-a"`, `"name":42`, 1), strings.Replace(validBody, `"image":"base"`, `"image":[]`, 1)} {
 		if _, err := DecodeRegistration(strings.NewReader(body)); err == nil {
 			t.Errorf("invalid decode accepted %s", body)
 		}

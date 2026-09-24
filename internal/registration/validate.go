@@ -1,9 +1,13 @@
 package registration
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
+	"perpetual/internal/invariant"
 )
 
 // Both identifier domains use the same opaque, lowercase UUID syntax. The
@@ -29,6 +33,21 @@ func validateID(id string) error {
 
 func ValidateRequestID(id string) error { return validateID(id) }
 func ValidateMachineID(id string) error { return validateID(id) }
+
+// NewRandomID returns a random version 4 UUID in the syntax validateID
+// accepts. Request IDs, machine IDs, and other opaque identifiers share it.
+func NewRandomID() (string, error) {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("generate identifier: %w", err)
+	}
+	raw[6] = (raw[6] & 0x0f) | 0x40
+	raw[8] = (raw[8] & 0x3f) | 0x80
+	encoded := hex.EncodeToString(raw[:])
+	id := encoded[:8] + "-" + encoded[8:12] + "-" + encoded[12:16] + "-" + encoded[16:20] + "-" + encoded[20:]
+	invariant.Check(validateID(id) == nil, "generated identifier invalid")
+	return id, nil
+}
 
 func nameEdge(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') }
 

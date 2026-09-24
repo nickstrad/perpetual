@@ -42,6 +42,12 @@ func (s *Store) Health(ctx context.Context) error {
 
 const recordColumns = "request_id,machine_id,name,image,vcpus,memory_mib,disk_mib,fingerprint,created_at"
 
+// selectRecord reads the registration whose unique column equals $1. Callers
+// pass a fixed column name from this package, never external text.
+func selectRecord(column string) string {
+	return "SELECT " + recordColumns + " FROM machine_registrations WHERE " + column + "=$1"
+}
+
 func scanRecord(row pgx.Row) (registration.Record, error) {
 	var requestID, machineID, name, image string
 	var vcpus int32
@@ -70,27 +76,48 @@ func scanRecord(row pgx.Row) (registration.Record, error) {
 }
 
 func (s *Store) LookupRequest(ctx context.Context, id registration.RequestID) (registration.Record, bool, error) {
+	return s.lookup(ctx, "request_id", string(id), "lookup request")
+}
+
+func (s *Store) LookupMachine(ctx context.Context, id registration.MachineID) (registration.Record, bool, error) {
+	return s.lookup(ctx, "machine_id", string(id), "lookup machine")
+}
+
+// lookup reads one committed registration without taking the gate. An absent
+// row is only an observation, never permission to create one.
+func (s *Store) lookup(ctx context.Context, column, value, label string) (registration.Record, bool, error) {
+	// The coordinator owns a registration's budget on its incoming context;
+	// this store bound protects direct callers: lookups, health, migration, tests.
 	bounded, cancel := context.WithTimeout(ctx, s.options.OperationTimeout)
 	defer cancel()
-	record, err := scanRecord(s.pool.QueryRow(bounded, "SELECT "+recordColumns+" FROM machine_registrations WHERE request_id=$1", string(id)))
+	record, err := scanRecord(s.pool.QueryRow(bounded, selectRecord(column), value))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return registration.Record{}, false, nil
 	}
 	if err != nil {
-		return registration.Record{}, false, fmt.Errorf("lookup request: %w", err)
+		return registration.Record{}, false, fmt.Errorf("%s: %w", label, err)
 	}
 	return record, true, nil
 }
 
-func (s *Store) LookupMachine(ctx context.Context, id registration.MachineID) (registration.Record, bool, error) {
-	bounded, cancel := context.WithTimeout(ctx, s.options.OperationTimeout)
-	defer cancel()
-	record, err := scanRecord(s.pool.QueryRow(bounded, "SELECT "+recordColumns+" FROM machine_registrations WHERE machine_id=$1", string(id)))
+// lockGate takes the registration gate row lock that serializes every
+// registration insert, then checks the gate's own range rules. Callers compare
+// the returned limit with configuration themselves: startup reports a mismatch
+// as an operator error, while a running reservation treats it as a defect.
+//
+// A missing gate row is an invariant failure for both callers. Migrate reaches
+// this only after recording or verifying the migration that inserted the row
+// in the same transaction, so its absence is database corruption of the same
+// kind as a counter that differs from the registration rows.
+func lockGate(ctx context.Context, tx pgx.Tx) (used, limit int64, err error) {
+	err = tx.QueryRow(ctx, "SELECT used,max_registrations FROM registration_gate WHERE singleton_id=1 FOR UPDATE").Scan(&used, &limit)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return registration.Record{}, false, nil
+		invariant.Fail("registration gate missing")
 	}
 	if err != nil {
-		return registration.Record{}, false, fmt.Errorf("lookup machine: %w", err)
+		return 0, 0, err
 	}
-	return record, true, nil
+	invariant.Check(limit > 0, "registration gate limit invalid")
+	invariant.Check(used >= 0 && used <= limit, "registration gate count invalid")
+	return used, limit, nil
 }
