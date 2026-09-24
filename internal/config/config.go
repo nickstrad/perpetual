@@ -72,6 +72,11 @@ func Parse(getenv func(string) string) (Config, error) {
 	if config.Workers >= config.PoolConnections {
 		return Config{}, fmt.Errorf("PERPETUAL_WORKERS must be less than PERPETUAL_POOL_CONNECTIONS")
 	}
+	// registration.NewService rejects this pair too; report it here so the
+	// operator sees a named variable before any resource is acquired.
+	if config.Workers > config.MaxJobs {
+		return Config{}, fmt.Errorf("PERPETUAL_WORKERS must not exceed PERPETUAL_MAX_JOBS")
+	}
 
 	durations := []struct {
 		key    string
