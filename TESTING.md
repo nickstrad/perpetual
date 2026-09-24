@@ -4,8 +4,18 @@ Build two complementary forms of tests: basic behavior tests with MC/DC coverage
 Validate external effects against real components as part of that work.
 Use the [MVP breakdown](plans/mvp/breakdown/README.md) to grow tests with each production slice.
 
-As of 2026-09-22, no Go implementation, simulator, or project test commands exist.
-The requirements below describe work to implement, not passing checks.
+Slice 1 implementation is in progress. The pure registration core passes the
+implemented T01–T04 validation, canonicalization, admission, transition and
+invariant cases (`go test ./internal/registration ./internal/invariant -run
+'TestT0[1-4]' -count=1`, Go 1.26.8). The test owner first ran these cases against
+compiling skeletons and observed behavioral failures; the lead independently
+confirmed the production core passes them. The fixed simulator S01–S10 also passes, including two replays of each recorded
+trace. A temporary production mutation that returned a retry’s candidate instead
+of the durable winner made S01 fail its independent durability oracle; the exact
+source was restored and the complete simulator passed again. These checks model
+coordination, not real database internals. Boundary and PostgreSQL suites are being
+developed for the next implementation chunks; their acceptance is still pending. The [decision inventory](docs/testing/decisions.md) distinguishes
+executed cases from remaining branch audits. No whole-repository MC/DC claim is made.
 Record delivered slices in [project direction](docs/knowledge/project-direction.md).
 The [simulation research](docs/TEST_RESEARCH.md) records influences, alternatives, and detailed modeling assumptions.
 
@@ -141,7 +151,7 @@ Validate those external boundaries through the real checks below.
 ### Implement the scope already planned
 
 Follow the numbered slices; expand only the current slice after discussing its boundaries and acceptance evidence.
-All seven remain planned. Keep earlier scenarios running as later behavior is added.
+Slice 1 is being implemented; slices 2–7 remain planned. Keep earlier scenarios running as later behavior is added.
 
 | Slice | Add to simulation | Required evidence |
 | --- | --- | --- |
