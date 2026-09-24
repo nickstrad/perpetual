@@ -19,3 +19,5 @@ go.work.sum
 
 # Local generated PR reading companions.
 /.scratchpad/
+/.runtime/
+/artifacts/

@@ -372,7 +372,7 @@ func Step(state State, event Event) (State, []Effect) {
 
 Omitted declarations: `EffectID` contains epoch/sequence; marker methods restrict event/effect variants to this package. `CheckOutcome` accepts only the declared enum range; success requires matching request ID, immutable parameters/fingerprint, a nonempty canonical machine ID and valid UTC timestamp. Non-success outcomes must not publish an authoritative record. Each relationship gets its own assertion.
 
-The coordinator discards stale completions from a previous service epoch **before** calling `Step`. An impossible duplicate/misrouted completion from the current owned worker contract is an invariant defect. HTTP retries are separate jobs sharing a durable request ID; they are not repeat `Submit` events on one state. Do not grow an unbounded in-memory history of request IDs.
+A completion from a previous service epoch cannot reach a live coordinator: its completion channel is private and fed only by its own workers. The coordinator therefore asserts the current epoch as an owner invariant **before** calling `Step`; the simulation harness models the restart boundary and discards old-epoch deliveries with `IsCurrentEpoch`. An impossible duplicate/misrouted completion from the current owned worker contract is an invariant defect. HTTP retries are separate jobs sharing a durable request ID; they are not repeat `Submit` events on one state. Do not grow an unbounded in-memory history of request IDs.
 
 `PhaseUncertain` records uncertainty for this response. Finishing the HTTP job does not cancel the external transaction or release its database locks. PostgreSQL owns the unresolved transaction until commit/abort. A subsequent job uses the original request ID and gate; it never uses local absence to overwrite another reservation.
 
@@ -695,7 +695,7 @@ The test owner writes executable suites during implementation, before releasing 
 | T02 Canonicalization | Literal canonical bytes/digest for fixed fixtures; differing whitespace/key order gives same parameters; every parameter change changes compared intent; caller input unchanged | A02, A03 |
 | T03 Admission | New, existing, parameter mismatch, fingerprint mismatch, name conflict, capacity; retry at capacity; invariant states fail with distinct messages | A01–A06, A11 |
 | T04 Step | One reserve then one reply; no premature success; unknown remains uncertain; invalid internal event/phase/effect/outcome fails; input unchanged | A05, A07, A11 |
-| T05 Service | Enqueue/cancel boundary, detached waiter, full queues, completion under saturation, shutdown and worker joins, stale epoch routing, inspection while mutations wait | A04, A05, A10 |
+| T05 Service | Enqueue/cancel boundary, detached waiter, full queues, completion under saturation, shutdown and worker joins, current-epoch owner invariant, inspection while mutations wait | A04, A05, A10 |
 | T06 HTTP/CLI | Actual local round trips for every status; generated ID printed before send; one mutation send; bounded bodies; canceled write yields uncertainty; no fake provisioned status | A01–A05, A10 |
 | T07 Store contract | Shared cases against simulated and PostgreSQL adapters; persisted winner/counter and classification, not just returned error | A01–A06, A09 |
 | T08 Fatal/ownership | Real subprocess worker and handler violations exit nonzero; invalid input stays alive; second lock owner rejected; shutdown releases lock | A10, A11 |
