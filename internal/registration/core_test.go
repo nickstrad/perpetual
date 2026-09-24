@@ -346,3 +346,72 @@ func TestT04EffectIdentityConditions(t *testing.T) {
 		t.Fatal("malformed current completion was hidden as stale")
 	}
 }
+
+func FuzzPureCore(f *testing.F) {
+	f.Add([]byte{0, 1, 2, 3})
+	f.Add([]byte{1, 1, 1, 1})
+	f.Add([]byte{2, 64, 255, 255})
+	f.Add([]byte{})
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 64 {
+			data = data[:64]
+		}
+		var choices [4]byte
+		copy(choices[:], data)
+		request := baseRequest()
+		request.Parameters.VCPUs = uint32(choices[1]%64) + 1
+		request.Parameters.MemoryMiB = 128 + uint64(choices[2])*128
+		request.Parameters.DiskMiB = 1024 + uint64(choices[3])*1024
+		var err error
+		request.Fingerprint, err = Fingerprint(request.Parameters)
+		if err != nil {
+			t.Fatal(err)
+		}
+		observed := Observation{Limit: 1}
+		if choices[0]&1 != 0 {
+			observed.HasRequest = true
+			observed.Used = 1
+			observed.Record = baseRecord()
+			observed.Record.Parameters = request.Parameters
+			observed.Record.Fingerprint = request.Fingerprint
+		}
+		if choices[0]&2 != 0 {
+			observed.NameTaken = true
+			observed.Used = 1 // A taken name implies one retained registration.
+		}
+		before := observed
+		input := request
+		a := DecideAdmission(request, observed)
+		b := DecideAdmission(request, observed)
+		if a != b || before != observed || input != request {
+			t.Fatal("admission nondeterminism or mutation")
+		}
+		if observed.HasRequest && a.Kind != AdmissionExisting {
+			t.Fatal("matching retry rejected at capacity")
+		}
+		if !observed.HasRequest && observed.NameTaken && a.Kind != AdmissionNameConflict {
+			t.Fatal("name ownership ignored")
+		}
+		id := EffectID{Epoch: "fuzz", Sequence: 1}
+		initial := NewState()
+		next, effects := Step(initial, Submit{Request: request, EffectID: id})
+		again, repeated := Step(initial, Submit{Request: request, EffectID: id})
+		if next != again || !reflect.DeepEqual(effects, repeated) || initial != NewState() || len(effects) != 1 {
+			t.Fatal("submit nondeterminism, mutation or unbounded effects")
+		}
+		outcome := Outcome{Kind: OutcomeUnknown}
+		if choices[0]&4 != 0 {
+			outcome = Outcome{Kind: OutcomeExisting, Record: baseRecord()}
+			outcome.Record.Parameters = request.Parameters
+			outcome.Record.Fingerprint = request.Fingerprint
+		}
+		saved := next
+		resolved, reply := Step(next, Completed{EffectID: id, Outcome: outcome})
+		if next != saved || len(reply) != 1 || resolved.Outcome != outcome {
+			t.Fatal("completion mutated input or lost outcome")
+		}
+		if outcome.Kind == OutcomeUnknown && resolved.Phase != PhaseUncertain {
+			t.Fatal("unknown completion lost uncertainty")
+		}
+	})
+}

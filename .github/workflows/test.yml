@@ -1,0 +1,26 @@
+name: durable requests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - run: go version && go list -m github.com/jackc/pgx/v5 && docker version
+      - run: make build test vet
+      - run: make test-race
+      - run: make test-fuzz
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: sanitized-test-evidence
+          path: |
+            artifacts/
+            /tmp/perpetual-pg-logs.*/postgres.log
+          if-no-files-found: ignore

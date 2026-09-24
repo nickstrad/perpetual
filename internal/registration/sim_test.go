@@ -29,19 +29,27 @@ type simAction struct {
 	Count   uint64
 }
 type simHeader struct {
-	Version   int
-	Harness   string
-	Revision  string
-	Toolchain string
-	Scenario  string
-	Limit     uint64
-	Initial   []Record
+	Version        int
+	Harness        string
+	Revision       string
+	Toolchain      string
+	Scenario       string
+	Limit          uint64
+	Initial        []Record
+	InitialPending []simInitialPending
+}
+type simInitialPending struct {
+	Job      string
+	Request  Request
+	EffectID EffectID
+	Record   Record
 }
 type simLine struct {
 	Number      int
 	Action      simAction
 	Observation string
 	Effects     []string
+	EffectIDs   []EffectID
 	Records     []Record
 	Replies     []simReply
 }
@@ -50,12 +58,14 @@ type simReply struct {
 	Outcome Outcome
 }
 type simTxn struct {
-	Request   Request
-	EffectID  EffectID
-	Record    Record
-	Outcome   Outcome
-	Pending   bool
-	Delivered bool
+	Request      Request
+	EffectID     EffectID
+	Record       Record
+	Outcome      Outcome
+	Pending      bool
+	Delivered    bool
+	Dispatched   bool
+	ReplyDropped bool
 }
 type simHarness struct {
 	header     simHeader
@@ -85,6 +95,16 @@ func newSim(header simHeader) (*simHarness, error) {
 		h.records[r.RequestID] = r
 		h.count++
 	}
+	for _, pending := range header.InitialPending {
+		if h.gate != "" || pending.Job == "" || pending.EffectID.Epoch == "" || pending.EffectID.Sequence == 0 {
+			return nil, fmt.Errorf("invalid initial pending ownership")
+		}
+		h.tx[pending.Job] = &simTxn{Request: pending.Request, EffectID: pending.EffectID, Record: pending.Record, Pending: true, Dispatched: true}
+		h.gate = pending.Job
+	}
+	if err := h.invariants(); err != nil {
+		return nil, err
+	}
 	if err := h.appendJSON(header); err != nil {
 		return nil, err
 	}
@@ -107,6 +127,17 @@ func (h *simHarness) dispatch(job string) error {
 	if !ok {
 		return fmt.Errorf("nonexistent effect %q", job)
 	}
+	if tx.Dispatched {
+		return fmt.Errorf("effect already dispatched %q", job)
+	}
+	if !IsCurrentEpoch(h.epoch, tx.EffectID) {
+		return fmt.Errorf("undispatched effect belongs to expired epoch")
+	}
+	tx.Dispatched = true
+	return h.beginTransaction(job)
+}
+func (h *simHarness) beginTransaction(job string) error {
+	tx := h.tx[job]
 	if h.gate != "" {
 		h.waiting = append(h.waiting, job)
 		return nil
@@ -148,7 +179,7 @@ func (h *simHarness) dispatchNext() error {
 	}
 	job := h.waiting[0]
 	h.waiting = h.waiting[1:]
-	return h.dispatch(job)
+	return h.beginTransaction(job)
 }
 func (h *simHarness) invariants() error {
 	if h.count != uint64(len(h.records)) || h.count > h.header.Limit {
@@ -204,14 +235,22 @@ func (h *simHarness) invariants() error {
 	}
 	return nil
 }
-func (h *simHarness) apply(a simAction) error {
+func (h *simHarness) apply(a simAction) (err error) {
+	// Test-only boundary: a production invariant terminates this scenario and
+	// retains its causal history. Production never recovers and continues.
+	defer func() {
+		if value := recover(); value != nil {
+			err = fmt.Errorf("simulation panic at failed action %+v: %v\ntrace:\n%s", a, value, h.trace.String())
+		}
+	}()
+
 	if len(h.lines) >= traceMaxSteps {
 		return fmt.Errorf("trace event bound exceeded")
 	}
 	line := simLine{Number: len(h.lines) + 1, Action: a}
 	switch a.Op {
 	case "submit":
-		if _, exists := h.states[a.Job]; exists {
+		if _, exists := h.tx[a.Job]; exists {
 			return fmt.Errorf("duplicate job")
 		}
 		h.sequence++
@@ -227,13 +266,14 @@ func (h *simHarness) apply(a simAction) error {
 		h.states[a.Job] = next
 		h.tx[a.Job] = &simTxn{Request: reserve.Request, EffectID: reserve.EffectID}
 		line.Effects = []string{"reserve:" + a.Job}
+		line.EffectIDs = []EffectID{reserve.EffectID}
 	case "dispatch":
 		if err := h.dispatch(a.Job); err != nil {
 			return err
 		}
 	case "unknown":
 		tx, ok := h.tx[a.Job]
-		if !ok || !tx.Pending {
+		if !ok || !tx.Pending || tx.Delivered || tx.Outcome.Kind != 0 {
 			return fmt.Errorf("unknown without dispatched pending transaction")
 		}
 		tx.Outcome = Outcome{Kind: OutcomeUnknown}
@@ -261,12 +301,14 @@ func (h *simHarness) apply(a simAction) error {
 		if !ok {
 			return fmt.Errorf("nonexistent effect %q", a.Job)
 		}
+		if !tx.Dispatched || tx.Delivered || tx.Outcome.Kind == 0 {
+			return fmt.Errorf("completion not eligible")
+		}
+		line.EffectIDs = []EffectID{tx.EffectID}
 		if !IsCurrentEpoch(h.epoch, tx.EffectID) {
+			tx.Delivered = true
 			line.Observation = "stale completion discarded"
 			break
-		}
-		if tx.Delivered || tx.Outcome.Kind == 0 {
-			return fmt.Errorf("completion not eligible")
 		}
 		state, ok := h.states[a.Job]
 		if !ok {
@@ -285,16 +327,37 @@ func (h *simHarness) apply(a simAction) error {
 		h.replies = append(h.replies, simReply{a.Job, reply.Outcome})
 		line.Effects = []string{"reply:" + a.Job}
 	case "drop-reply":
+		tx, ok := h.tx[a.Job]
+		if !ok || !tx.Delivered || tx.ReplyDropped {
+			return fmt.Errorf("reply not eligible for loss")
+		}
+		hasReply := false
+		for _, reply := range h.replies {
+			if reply.Job == a.Job {
+				hasReply = true
+			}
+		}
+		if !hasReply {
+			return fmt.Errorf("reply not produced")
+		}
+		tx.ReplyDropped = true
 		line.Observation = "HTTP reply lost after coordinator completion"
 	case "restart":
+		for job, tx := range h.tx {
+			if !tx.Dispatched {
+				delete(h.tx, job)
+			}
+		}
 		h.states = map[string]State{}
 		h.generation++
 		h.epoch = fmt.Sprintf("epoch-%d", h.generation)
 		h.sequence = 0
 		line.Observation = "fresh production state constructor; durable transactions retained"
 	case "database-restart":
+		// PostgreSQL restart kills the gate owner AND transactions waiting on it.
+		// A service restart, in contrast, leaves both dispatched operations alive.
 		for _, tx := range h.tx {
-			if tx.Pending {
+			if tx.Dispatched && (tx.Pending || tx.Outcome.Kind == 0) {
 				tx.Pending = false
 				if !tx.Delivered {
 					tx.Outcome = Outcome{Kind: OutcomeUnavailable}
@@ -302,10 +365,8 @@ func (h *simHarness) apply(a simAction) error {
 			}
 		}
 		h.gate = ""
-		if err := h.dispatchNext(); err != nil {
-			return err
-		}
-		line.Observation = "uncommitted transactions aborted; committed records retained"
+		h.waiting = nil
+		line.Observation = "all unresolved database transactions aborted; committed records retained"
 	case "absent":
 		if _, found := h.records[a.Request.ID]; found {
 			return fmt.Errorf("expected absent committed observation")
@@ -585,5 +646,84 @@ func TestSimulationOracleDetectsPrematureSuccess(t *testing.T) {
 	h.replies = append(h.replies, simReply{Job: "injected", Outcome: Outcome{Kind: OutcomeCreated, Record: baseRecord()}})
 	if err := h.invariants(); err == nil || !strings.Contains(err.Error(), "before matching durability") {
 		t.Fatal("independent oracle failed to detect premature publication")
+	}
+}
+
+func TestSimulationS10RejectsImpossibleLifecycle(t *testing.T) {
+	scenarios := []struct {
+		name    string
+		prefix  []simAction
+		invalid simAction
+	}{
+		{"undispatched-before-crash", []simAction{submit("old", baseRequest()), action("restart", "")}, action("dispatch", "old")},
+		{"duplicate-dispatch", []simAction{submit("job", baseRequest()), action("dispatch", "job"), action("commit", "job"), action("complete", "job")}, action("dispatch", "job")},
+		{"nonexistent-reply", nil, action("drop-reply", "missing")},
+		{"undelivered-reply", []simAction{submit("job", baseRequest()), action("dispatch", "job"), action("commit", "job")}, action("drop-reply", "job")},
+		{"completion-before-storage", []simAction{submit("job", baseRequest()), action("dispatch", "job")}, action("complete", "job")},
+	}
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			h, err := newSim(scenarioHeader(scenario.name, 2))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, a := range scenario.prefix {
+				if err := h.apply(a); err != nil {
+					t.Fatal(err)
+				}
+			}
+			trace := append([]byte(nil), h.trace.Bytes()...)
+			line, _ := json.Marshal(simLine{Number: len(h.lines) + 1, Action: scenario.invalid})
+			trace = append(trace, line...)
+			trace = append(trace, '\n')
+			if _, err := replay(trace); err == nil {
+				t.Fatal("replay accepted impossible lifecycle")
+			}
+			if err := h.apply(scenario.invalid); err == nil {
+				t.Fatal("live scheduler accepted impossible lifecycle")
+			}
+		})
+	}
+}
+func TestSimulationInitialPendingTransaction(t *testing.T) {
+	header := scenarioHeader("initial-pending", 2)
+	header.InitialPending = []simInitialPending{{Job: "previous-service", Request: baseRequest(), EffectID: EffectID{Epoch: "epoch-0", Sequence: 1}, Record: baseRecord()}}
+	h, err := newSim(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []simAction{{Op: "absent", Request: baseRequest()}, action("commit", "previous-service"), action("complete", "previous-service"), submit("retry", baseRequest()), action("dispatch", "retry"), action("complete", "retry"), expected("retry", OutcomeExisting), {Op: "count", Count: 1}} {
+		if err := h.apply(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		got, err := replay(h.trace.Bytes())
+		if err != nil || !bytes.Equal(got, h.trace.Bytes()) {
+			t.Fatalf("initial pending replay: %v", err)
+		}
+	}
+}
+
+func TestSimulationDatabaseCrashAbortsGateWaiters(t *testing.T) {
+	r := baseRequest()
+	other := r
+	other.ID = "33333333-3333-4333-8333-333333333333"
+	other.CandidateID = "44444444-4444-4444-8444-444444444444"
+	runScenario(t, "database-crash-owner-and-waiter", 2, []simAction{submit("owner", r), submit("waiter", other), action("dispatch", "owner"), action("dispatch", "waiter"), action("waiting", "waiter"), action("database-restart", ""), action("complete", "owner"), action("complete", "waiter"), expected("owner", OutcomeUnavailable), expected("waiter", OutcomeUnavailable), {Op: "count", Count: 0}, submit("fresh", r), action("dispatch", "fresh"), action("commit", "fresh"), action("complete", "fresh"), expected("fresh", OutcomeCreated), action("progress", "")})
+}
+
+func TestSimulationInvariantFailureRetainsTrace(t *testing.T) {
+	h, _ := newSim(scenarioHeader("fatal-trace", 2))
+	if err := h.apply(submit("job", baseRequest())); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.apply(action("dispatch", "job")); err != nil {
+		t.Fatal(err)
+	}
+	h.tx["job"].Outcome = Outcome{Kind: OutcomeCreated}
+	err := h.apply(action("complete", "job"))
+	if err == nil || !strings.Contains(err.Error(), "failed action") || !strings.Contains(err.Error(), "trace:") || !strings.Contains(err.Error(), `"Op":"dispatch"`) {
+		t.Fatalf("production invariant lacked reproducible trace: %v", err)
 	}
 }
