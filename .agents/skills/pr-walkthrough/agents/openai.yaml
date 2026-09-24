@@ -1,0 +1,4 @@
+interface:
+  display_name: "pr-walkthrough"
+  short_description: "Explain a PR from its last changed file upward"
+  default_prompt: "Use $pr-walkthrough to make a local illustrated walkthrough of this PR."

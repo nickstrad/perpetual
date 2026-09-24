@@ -2,7 +2,7 @@
 
 Build two complementary forms of tests: basic behavior tests with MC/DC coverage and targeted fuzzing, and deterministic simulation of coordination and recovery.
 Validate external effects against real components as part of that work.
-Use the [MVP breakdown](plans/mvp/breakdown/README.md) to grow tests with each production slice.
+Use the [MVP breakdown](docs/plans/README.md) to grow tests with each production slice.
 
 As of 2026-09-22, no Go implementation, simulator, or project test commands exist.
 The requirements below describe work to implement, not passing checks.
@@ -145,13 +145,13 @@ All seven remain planned. Keep earlier scenarios running as later behavior is ad
 
 | Slice | Add to simulation | Required evidence |
 | --- | --- | --- |
-| [1. Durable requests](plans/mvp/breakdown/1-durable-requests.md) | Fixed events, reservations, lost replies, pending commits, restart, and trace replay | One stable identity across retry and restart; conflicting reuse rejected; unknown commits do not permit conflicting work; real PostgreSQL contracts agree |
-| [2. Live machines](plans/mvp/breakdown/2-live-machines.md) | Logical deadlines, lifecycle effects, delayed health, launch uncertainty, and partial cleanup | Distinct allocations; no duplicate launch without resolved ownership; real boot, SSH, and two-machine independence |
-| [3. Detached commands](plans/mvp/breakdown/3-detached-commands.md) | Guest acceptance, lost acknowledgment, launch gaps, and output collection | No blind replay; accepted execution survives caller detachment and control-plane outage; cursors never exceed durable output; real process and journal checks |
-| [4. Working with commands](plans/mvp/breakdown/4-command-actions.md) | File/input/cancel races, deadlines, and bounded seeded schedules | Correct cancel-versus-complete behavior; no automatic resend of uncertain input; bounded output; real file, pipe, and process effects |
-| [5. Recovery](plans/mvp/breakdown/5-recovery.md) | Independent crashes, stale observations, and bounded progress | Healthy machine B progresses while A remains unreachable; separate real service, guest-agent, and database restarts |
-| [6. Streaming](plans/mvp/breakdown/6-streaming.md) | Polling/streaming changes, duplicate delivery, and reconnect schedules | Equivalent retained outcomes without restarting execution; real HTTP/HTTPS/WebSocket behavior and fallback |
-| [7. Snapshots](plans/mvp/breakdown/7-snapshots.md) | Drain races, capture/publication failures, termination, and restored identities | Incomplete artifacts cannot restore; old boot observations are rejected; real snapshot restoration succeeds |
+| [1. Durable requests](docs/plans/durable_requests/README.md) | Fixed events, reservations, lost replies, pending commits, restart, and trace replay | One stable identity across retry and restart; conflicting reuse rejected; unknown commits do not permit conflicting work; real PostgreSQL contracts agree |
+| [2. Live machines](docs/plans/2-live-machines.md) | Logical deadlines, lifecycle effects, delayed health, launch uncertainty, and partial cleanup | Distinct allocations; no duplicate launch without resolved ownership; real boot, SSH, and two-machine independence |
+| [3. Detached commands](docs/plans/3-detached-commands.md) | Guest acceptance, lost acknowledgment, launch gaps, and output collection | No blind replay; accepted execution survives caller detachment and control-plane outage; cursors never exceed durable output; real process and journal checks |
+| [4. Working with commands](docs/plans/4-command-actions.md) | File/input/cancel races, deadlines, and bounded seeded schedules | Correct cancel-versus-complete behavior; no automatic resend of uncertain input; bounded output; real file, pipe, and process effects |
+| [5. Recovery](docs/plans/5-recovery.md) | Independent crashes, stale observations, and bounded progress | Healthy machine B progresses while A remains unreachable; separate real service, guest-agent, and database restarts |
+| [6. Streaming](docs/plans/6-streaming.md) | Polling/streaming changes, duplicate delivery, and reconnect schedules | Equivalent retained outcomes without restarting execution; real HTTP/HTTPS/WebSocket behavior and fallback |
+| [7. Snapshots](docs/plans/7-snapshots.md) | Drain races, capture/publication failures, termination, and restored identities | Incomplete artifacts cannot restore; old boot observations are rejected; real snapshot restoration succeeds |
 
 For slice 1, commit registration, lose the reply, retry, restart, and inspect.
 Also lose the connection while a commit remains pending and submit conflicting requests.

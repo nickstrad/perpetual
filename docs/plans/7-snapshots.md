@@ -39,7 +39,7 @@ Draining blocks new platform mutations while existing work finishes.
 
 These walkthroughs illustrate planned behavior; nothing here exists yet.
 Discussion questions below may still change individual steps.
-Notation follows [slice 1](1-durable-requests.md#walkthroughs).
+Notation follows [slice 1](durable_requests/README.md#walkthroughs).
 s1 names the snapshot; B1 and B2 name successive boot identities.
 
 ### Walkthrough 1: drain, capture, publish, terminate
@@ -342,9 +342,9 @@ Which artifacts and confirmations establish a complete, restorable snapshot?
 What recovery preserves the original disk when restoration fails?
 Which remaining limitations must the final walkthrough explicitly teach?
 
-Astra leads snapshot contracts, restoration decisions, and all testing.
+The design and test owners establish snapshot contracts, restoration decisions, and testing; assign models when expanding this slice.
 Production owners address scoped integration defects.
-Luna high documents settled walkthroughs; the lead performs final acceptance.
+The documentation owner records settled walkthroughs; the lead performs final acceptance.
 
 Cloning, live migration, automatic expiry, and multi-host coordination remain deferred.
 Reference scope: old M9/M10.

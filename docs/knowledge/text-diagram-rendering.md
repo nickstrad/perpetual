@@ -34,7 +34,7 @@ Piping rendered text through `cut -c` corrupts multi-byte characters.
 ## Adopted convention
 
 Sources live beside their documents in a `diagrams/` folder.
-The [breakdown sources](../../plans/mvp/breakdown/diagrams/README.md) show the pattern.
+The [breakdown sources](../plans/diagrams/README.md) show the pattern.
 A `<!-- draw-visual: diagrams/NAME.mmd -->` marker precedes each embedded render.
 `scripts/render.py --update FILE.md` regenerates embeds; `--check` fails on stale or over-wide ones.
 Render options live in each source's first line, so re-renders stay identical.

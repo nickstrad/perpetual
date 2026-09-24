@@ -1,7 +1,7 @@
 # 1. Architecture after durable requests
 
-Read the [slice plan](1-durable-requests.md) and [diagram conventions](README.md#reading-the-architecture-diagrams).
-Shared terms live in [the simulator's place](README.md#the-simulators-place).
+Read the [slice plan](README.md) and [diagram conventions](../README.md#reading-the-architecture-diagrams).
+Shared terms live in [the simulator's place](../README.md#the-simulators-place).
 This cumulative target includes earlier slices; it does not claim implementation.
 
 ## New in this slice
@@ -23,7 +23,7 @@ The second shows the decision loop inside `agent-plane`; arrows keep their numbe
 └────────┘    └─────────────┘    └───────────┘    └──────────┘
 ```
 
-<!-- draw-visual: diagrams/architecture-decision-loop.mmd -->
+<!-- draw-visual: ../diagrams/architecture-decision-loop.mmd -->
 ```text
 ┌────────────────┐
 │     events     │◄───────┐
@@ -126,6 +126,6 @@ Later slices add rows; these rows keep applying.
 ## Learning checkpoint
 
 Follow a request from admission through persistence, response loss, and retry.
-Trace walkthrough 1 of the [plan](1-durable-requests.md#walkthroughs) along arrows (1) through (6).
+Trace walkthrough 1 of the [plan](README.md#walkthroughs) along arrows (1) through (6).
 Explain walkthrough 2 by naming the arrow each fault cuts.
 A real PostgreSQL test must verify the reservation contract independently.

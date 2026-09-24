@@ -38,7 +38,7 @@ HTTPS encrypts HTTP; secure WebSockets use its encrypted connection.
 
 These walkthroughs illustrate planned behavior; nothing here exists yet.
 Discussion questions below may still change individual steps.
-Notation follows [slice 1](1-durable-requests.md#walkthroughs).
+Notation follows [slice 1](durable_requests/README.md#walkthroughs).
 X1 names the command; `#n` means numbered output position n.
 
 ### Walkthrough 1: automatic mode streams, drops, then resumes by polling
@@ -275,8 +275,8 @@ What qualifies a command for streaming rather than polling?
 How will collectors avoid conflicting ownership while switching transports?
 Which certificate and connection failures should trigger fallback or explicit errors?
 
-Sol leads transport integration; Terra handles configured encrypted transport boundaries.
-Astra owns equivalence checks, simulator scenarios, and real-server testing.
+Production owners implement transport integration and configured encrypted transport boundaries.
+The test owner maintains equivalence checks, simulator scenarios, and real-server testing; assign models when expanding this slice.
 The lead validates that transport changes preserve execution semantics.
 
 Certificate issuance and broader security hardening remain outside this slice.

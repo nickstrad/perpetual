@@ -18,10 +18,10 @@ No coordinator, simulator, test target, or CI implementation exists yet.
 PostgreSQL is the selected state backend; database fixtures remain unimplemented.
 The custom simulator remains database-free.
 [TESTING.md](../TESTING.md) defines MC/DC coverage, simulation requirements, real-effect validation, and maintenance.
-The [MVP breakdown](../plans/mvp/breakdown/README.md) pairs platform slices with simulator growth.
+The [MVP breakdown](plans/README.md) pairs platform slices with simulator growth.
 The [project direction](knowledge/project-direction.md) entry records which slices have been delivered.
-Astra owns the harness, scenarios, fixtures, invariant checks, and testing documentation.
-Production owners implement shared decisions and real adapters with Astra's collaboration.
+The assigned test owner maintains the harness, scenarios, fixtures, invariant checks, and testing documentation.
+Production owners implement shared decisions and real adapters in collaboration with the test owner.
 The lead independently validates results and updates the plan and tracker.
 
 ## Lessons from primary sources

@@ -39,7 +39,7 @@ Earlier slices already recover their introduced effects; this slice combines tho
 
 These walkthroughs illustrate planned behavior; nothing here exists yet.
 Discussion questions below may still change individual steps.
-Notation follows [slice 1](1-durable-requests.md#walkthroughs).
+Notation follows [slice 1](durable_requests/README.md#walkthroughs).
 X1 and Y1 name commands on machines a and b.
 
 ### Walkthrough 1: agent-plane restarts; a is unreachable, b is healthy
@@ -326,7 +326,7 @@ Which observations close uncertainty, and which require operator intervention?
 What scheduling assumptions make a healthy-machine progress deadline meaningful?
 Which bounded retries avoid turning an unavailable guest into host-wide starvation?
 
-Astra leads recovery decisions and testing.
+The design and test owners lead recovery decisions and testing; assign models when expanding this slice.
 Production owners implement scoped fixes in their existing components.
 The lead reviews uncertainty classifications and independent-machine progress.
 

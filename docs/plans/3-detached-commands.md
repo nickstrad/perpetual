@@ -41,7 +41,7 @@ A journal records durable guest evidence; a cursor tracks collected output posit
 
 These walkthroughs illustrate planned behavior; nothing here exists yet.
 Discussion questions below may still change individual steps.
-Notation follows [slice 1](1-durable-requests.md#walkthroughs).
+Notation follows [slice 1](durable_requests/README.md#walkthroughs).
 Output `#n` means the numbered output position n.
 
 ### Walkthrough 1: start, detach, collect, watch later
@@ -381,8 +381,8 @@ Which launch evidence permits inspection but forbids automatic replay?
 How do output limits interact with slow or disconnected collectors?
 What should watch display when a command's outcome remains uncertain?
 
-Astra leads guest admission and output contracts; Sol integrates dispatch and watch.
-Terra supplies process boundaries; Astra owns simulator and real-process testing.
+The design owner establishes guest admission and output contracts; production owners implement dispatch, watch, and process boundaries.
+The test owner maintains simulator and real-process testing; assign models when expanding this slice.
 The lead reviews detach and restart behavior before acceptance.
 
 Interactive terminals remain SSH's responsibility.

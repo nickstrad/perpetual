@@ -1,12 +1,12 @@
 # 2. Live machines and lifecycle simulation
 
-Requires [slice 1](1-durable-requests.md).
+Requires [slice 1](durable_requests/README.md).
 See the [cumulative architecture](2-live-machines_architecture.md).
 
 ## Actors and actions
 
 An actor is a module or entity that performs actions within this slice.
-Actors from [slice 1](1-durable-requests.md#actors-and-actions) remain; this table lists their new actions.
+Actors from [slice 1](durable_requests/README.md#actors-and-actions) remain; this table lists their new actions.
 
 | Platform actor | Where it lives | Actions in this slice |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ A boot identity distinguishes each execution of a machine.
 
 These walkthroughs illustrate planned behavior; nothing here exists yet.
 Discussion questions below may still change individual steps.
-Notation follows [slice 1](1-durable-requests.md#walkthroughs).
+Notation follows [slice 1](durable_requests/README.md#walkthroughs).
 Decision steps stay hidden; `agent-plane` still routes every choice through them.
 
 ### Walkthrough 1: boot machine a and open SSH
@@ -358,8 +358,8 @@ How will restart identify a process when launch acknowledgment disappears?
 Which resources require confirmed termination before release?
 What guest initialization proves SSH availability and correct child-process handling?
 
-Terra leads host and image boundaries; Sol integrates lifecycle workflows.
-Luna high handles the settled SSH wrapper; Astra owns lifecycle tests and simulation.
+Production owners implement host and image boundaries, lifecycle workflows, and the settled SSH wrapper.
+The test owner maintains lifecycle tests and simulation; assign models when expanding this slice.
 The lead requires actual machine evidence before acceptance.
 
 Platform command execution waits for slice 3.
