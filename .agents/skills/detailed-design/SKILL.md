@@ -15,7 +15,7 @@ Make the design concrete enough that an implementation agent can work without in
 
 ## Ground the work
 
-Locate the repository root. Read `docs/knowledge/index.md`, relevant knowledge entries, `GUIDANCE.md`, `TESTING.md`, `docs/TIGERSTYLE.md`, the active breakdown, and the current slice. Read `docs/TEST_RESEARCH.md` for coordination or simulated boundaries. Use `plans/1-mvp/v1.5.md` as contract reference, not the work sequence. Inspect existing code, instructions, and state before proposing replacements.
+Locate the repository root. Read `docs/knowledge/index.md`, relevant knowledge entries, `GUIDANCE.md`, `TESTING.md`, `docs/TIGERSTYLE.md`, `docs/plans/README.md`, and the current slice. Read `docs/TEST_RESEARCH.md` for coordination or simulated boundaries. Use the current slice design as the contract reference; superseded plan revisions remain in Git history. Inspect existing code, instructions, and state before proposing replacements.
 
 Expand the current slice only. Explain its boundary and acceptance evidence before writing the details. Resolve routine choices and state their rationale. Ask only about material unresolved behavior; while waiting, develop independent portions. Distinguish a proposed choice from an accepted requirement. A request to produce a design authorizes documenting proposed resolutions, not pretending the user already approved them.
 

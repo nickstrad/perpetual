@@ -158,7 +158,7 @@ Small shell scripts remain appropriate for transparent host setup and image cons
 
 ## Testing and review
 
-Astra owns testing design, implementation, simulation, and the living [testing guide](../TESTING.md).
+The assigned test owner maintains testing design, implementation, simulation, and the living [testing guide](../TESTING.md).
 Production owners provide testable boundaries and fix defects in their components.
 The lead reviews interactions, verifies evidence, and updates plans before committing.
 Add one readable simulation scenario alongside each new simulated behavior.

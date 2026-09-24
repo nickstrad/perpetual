@@ -1,7 +1,7 @@
 # Durable registration boundaries
 
 Recorded 2026-09-24 during slice 1 implementation. The
-[implementation plan](../../plans/mvp/breakdown/1-durable-requests-plan.md) owns the
+[implementation plan](../plans/durable_requests/plan.md) owns the
 API and resource contracts; [TESTING.md](../../TESTING.md) owns verification status.
 
 Registration records intent only. PostgreSQL is authoritative for request IDs,

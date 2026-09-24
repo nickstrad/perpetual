@@ -39,12 +39,13 @@ Follow [Go TigerStyle](docs/TIGERSTYLE.md) for concrete coding and invariant gui
 
 ## Ownership and review
 
-Astra owns testing strategy, test implementation, fixtures, test infrastructure, and `TESTING.md`.
+The assigned test owner owns testing strategy, test implementation, fixtures, test infrastructure, and `TESTING.md`.
 Production owners collaborate on testability and fix defects in their assigned components.
 The lead assistant owns final review, validation, plan updates, and commits.
-Only delegate additional testing work when the user's instructions permit reassignment.
+Assign concrete models and file ownership in the current plan using the [detailed-design skill](.agents/skills/detailed-design/SKILL.md).
+Use a separate reviewer for independent review; the lead retains final acceptance responsibility.
 
-Read the [MVP breakdown](plans/mvp/breakdown/README.md) before implementing platform changes.
+Read the [MVP breakdown](docs/plans/README.md) before implementing platform changes.
 [Project direction](docs/knowledge/project-direction.md) records delivered slices; assignments alone never imply completion.
 Track in-progress work in untracked `.state/` files, as [CLAUDE.md](CLAUDE.md#working-state) describes.
 Expand one slice at a time while keeping later plans mid-level.

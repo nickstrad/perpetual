@@ -1,15 +1,14 @@
 # Slice 1 implementation design: durable requests
 
-Status: implemented and independently reviewed on `implement/durable-requests`, 2026-09-24. Local verification passes; not yet merged. Design written 2026-09-23 against repository revision `1ae6480`.
-The Go, SQL, shell, and JSON examples below remain design sketches, originally **proposed, not executed**. Implementation and executed evidence live in the source, tests, testing guide, and linked work ledger; a sketch is not evidence of a passing check.
+Status: current slice 1 design, written 2026-09-23 against repository revision `1ae6480`.
+Go, SQL, shell, and JSON examples are design sketches, not execution evidence.
+[Project direction](../../knowledge/project-direction.md) records implementation status;
+[TESTING.md](../../../TESTING.md) records available checks and their limits.
 
-Source slice: [durable requests](1-durable-requests.md). Architecture: [slice 1](1-durable-requests_architecture.md). Sequence: [MVP breakdown](README.md).
+Source slice: [durable requests](README.md). Architecture: [slice 1](architecture.md). Sequence: [MVP breakdown](../README.md).
 Resume ledger: [plan_state.md](../../../.state/1-durable-requests/plan_state.md), local and ignored by Git.
 Planning workflow: [detailed-design skill](../../../.agents/skills/detailed-design/SKILL.md).
-Governing documents: [guidance](../../../GUIDANCE.md), [TigerStyle](../../../docs/TIGERSTYLE.md), [testing](../../../TESTING.md), and [simulation research](../../../docs/TEST_RESEARCH.md).
-
-Executed evidence: [acceptance record](../../../docs/testing/durable-requests-acceptance.md),
-[testing guide](../../../TESTING.md), and [decision inventory](../../../docs/testing/decisions.md).
+Governing documents: [guidance](../../../GUIDANCE.md), [TigerStyle](../../TIGERSTYLE.md), [testing](../../../TESTING.md), and [simulation research](../../TEST_RESEARCH.md).
 
 ## 1. Outcome and scope
 
@@ -19,7 +18,7 @@ The demonstration runs the real CLI, HTTP service, and PostgreSQL adapter. A det
 
 This slice creates an intent record. It does not boot a VM, reserve running-machine memory, create network devices, invoke Firecracker, or execute commands. Guest and machine lifecycle work belongs to later slices. The only host resource capacity introduced here is a bound on retained registration records, named `max_registrations` so it cannot be mistaken for running capacity.
 
-At the design baseline, the repository had documentation and tooling only. The paths below describe the implemented slice’s responsibilities. Do not add a generic scheduler framework or future lifecycle columns merely because later slices will need them.
+At the design baseline, the repository had documentation and tooling only. The paths below describe this slice’s responsibilities. Do not add a generic scheduler framework or future lifecycle columns merely because later slices will need them.
 
 ### 1.1 Proposed resolutions of the slice's discussion questions
 
@@ -31,9 +30,9 @@ At the design baseline, the repository had documentation and tooling only. The p
 | What is the minimum surface? | `PUT /v1/registrations/{request_id}`, two read routes, and readiness | Names registration explicitly without prematurely implementing the historical create/start operation API |
 | How much concurrency is necessary? | One owned coordinator loop, bounded external workers, and a short database gate for registration mutations | Decisions stay deterministic; database constraints remain authoritative; inspections do not take the mutation gate |
 
-These are the concrete proposal supplied by this planning request, not a claim of prior user approval or runtime validation. Implementation begins only when requested. A later instruction to implement this plan supplies authorization without needing another generic approval round.
+These resolutions define the registration contract. They do not establish runtime validation.
 
-The registration-specific HTTP surface deliberately refines the older `POST /v1/machines -> 202 Operation` reference. No API is implemented yet. Future provisioning may add that operation surface without changing the meaning of registration. The global registration gate trades mutation throughput for simple bounded coordination; it is not a design for future independent guest execution.
+The registration-specific HTTP surface deliberately refines the older `POST /v1/machines -> 202 Operation` reference. Future provisioning may add that operation surface without changing the meaning of registration. The global registration gate trades mutation throughput for simple bounded coordination; it is not a design for future independent guest execution.
 
 ### 1.2 Acceptance requirements
 
@@ -686,7 +685,7 @@ Reconstruct fresh state twice from the same trace and compare normalized trace a
 
 ## 8. Test design and failure evidence
 
-The test owner wrote executable suites before releasing their dependent production packets. This section preserves the original test design; actual results are recorded in the acceptance evidence. Assertions derive from the contracts above. Test setup may create compiling types/interfaces and explicit unimplemented skeletons. A compile error or missing database is not useful TDD red evidence.
+The test owner writes executable suites during implementation, before releasing their dependent production packets. This section specifies those suites; actual execution evidence belongs in the testing guide. Assertions derive from the contracts above. Test setup may create compiling types/interfaces and explicit unimplemented skeletons. A compile error or missing database is not useful TDD red evidence.
 
 ### 8.1 Basic tests and MC/DC inventory
 
@@ -815,7 +814,7 @@ For P08, production classification tests can cover SQLSTATE handling determinist
 
 ## 9. Delegation and TDD work packets
 
-Model assignments are explicit here rather than in general repository guidance. The assignments below were executed; actual worker IDs and handoffs are recorded in the ignored plan ledger. Use the [skill's routing policy](../../../.agents/skills/detailed-design/SKILL.md) when resolving runtime availability.
+Model assignments are explicit here rather than in general repository guidance. They define work ownership; actual handoffs and results belong in the local ledger. Use the [skill's routing policy](../../../.agents/skills/detailed-design/SKILL.md) when resolving runtime availability.
 
 For Codex, select Astra for design/testing/review, Sol for substantial production work, and Luna high for settled scaffolding. For Claude, use Fable for the highest-tier tasks when exposed by that environment, otherwise Opus; use Opus for substantial implementation and Sonnet high for settled scaffolding. Do not guess a Fable model identifier. Record the actual available ID and effort in state before dispatch. Highest-tier test and reviewer roles are separate agent runs even if they use the same model.
 
@@ -918,4 +917,4 @@ Each checkpoint records task ID/status, actual model ID/effort/run, owned files,
 
 If switching from Codex to Claude, read the same plan and state, inspect the actual files and evidence, reconcile live processes/agents, then choose available assignments from section 9. Do not repeat completed checks without a changed revision or unresolved risk. If this local state is absent in another checkout, recreate it from the plan and durable evidence and explicitly mark execution history unknown.
 
-DR00–DR09 implementation and local acceptance are complete. Core, real PostgreSQL, actual CLI/service restart and reply-loss, deterministic replay, race, static and bounded fuzz checks pass. Independent review has no unresolved material correctness findings. Full MC/DC is not established: exact residual error-path and orchestration gaps remain documented in the decision inventory. Follow the linked ledger for commits and PR delivery state; no GitHub CI result is implied.
+Use project direction and the testing guide to establish the delivered state before resuming. The plan defines contracts and acceptance requirements; it does not establish a passing runtime or CI result.

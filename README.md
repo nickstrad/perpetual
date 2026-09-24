@@ -70,7 +70,7 @@ An absent read does not prove an in-flight registration aborted.
 simulation assumptions, and coverage limitations. Integration checks own their
 disposable database server and never borrow an operator's database.
 
-The [slice 1 plan](plans/mvp/breakdown/1-durable-requests-plan.md) specifies the
-registration and recovery contracts. The [MVP breakdown](plans/mvp/breakdown/README.md)
+The [slice 1 plan](docs/plans/durable_requests/plan.md) specifies the
+registration and recovery contracts. The [MVP breakdown](docs/plans/README.md)
 sets the implementation order; [project direction](docs/knowledge/project-direction.md)
 records delivery status.

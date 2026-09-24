@@ -1,9 +1,8 @@
 # 1. Durable requests and the first simulator
 
-Read the [roadmap](README.md) and [cumulative architecture](1-durable-requests_architecture.md).
-Original starting point: an empty codebase. Registration is now implemented and locally
-validated; full MC/DC coverage is not established. See the [implementation plan](1-durable-requests-plan.md),
-[testing guide](../../../TESTING.md), and [usage](../../../README.md).
+Read the [roadmap](../README.md), [cumulative architecture](architecture.md), and [detailed implementation design](plan.md).
+Original starting point: an empty codebase. See [project direction](../../knowledge/project-direction.md)
+for delivery status and the [testing guide](../../../TESTING.md) for execution evidence.
 
 ## Actors and actions
 
@@ -42,7 +41,7 @@ Read each diagram downward; every column is one actor.
 An arrow carries one numbered action from its sender to its receiver.
 A cross ends a lost message; a wide note marks crashes and restarts.
 A note over one actor is work that actor performs alone.
-Diagrams are generated; read [diagrams](diagrams/README.md) before changing one.
+Diagrams are generated; read [diagrams](../diagrams/README.md) before changing one.
 The PostgreSQL column includes its adapter inside `agent-plane`.
 R1 names a request identifier; P and P2 name differing parameters.
 
@@ -341,9 +340,9 @@ Which registration states clearly distinguish records from provisioned machines?
 What evidence resolves a pending registration without duplicating its identity?
 Which trace format can a reader follow without understanding harness internals?
 
-Astra leads contracts and simulation; Terra owns persistence; Sol integrates the request path.
-Luna high can handle settled entrypoints and configuration scaffolding.
-The lead validates the whole demonstration and updates [project direction](../../../docs/knowledge/project-direction.md).
+The design and test owners establish contracts and simulation; production owners implement persistence and the request path.
+The [detailed design](plan.md) proposes resolutions to these questions and assigns concrete models and work packets.
+The lead validates the whole demonstration and updates [project direction](../../knowledge/project-direction.md).
 
 Booting machines, guest actions, and randomized schedules wait for later slices.
 Reference scope: old M0/M1, adapted around registration rather than premature command execution.

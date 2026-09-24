@@ -39,7 +39,7 @@ Cancellation requests termination; a timeout sets an execution deadline.
 
 These walkthroughs illustrate planned behavior; nothing here exists yet.
 Discussion questions below may still change individual steps.
-Notation follows [slice 1](1-durable-requests.md#walkthroughs).
+Notation follows [slice 1](durable_requests/README.md#walkthroughs).
 W1 and X1 name action identifiers; `#n` numbers one input message.
 
 ### Walkthrough 1: write a file, run a command, read results
@@ -371,8 +371,8 @@ Which input acknowledgments establish delivery, and which remain ambiguous?
 How should manual SSH changes constrain file recovery?
 Which competing events justify randomized ordering beyond fixed scenarios?
 
-Terra leads file and process integration; Sol extends request paths.
-Astra owns ordering contracts, simulator generation, and all corresponding tests.
+Production owners implement file/process integration and request paths.
+The design and test owners establish ordering contracts, simulator generation, and corresponding tests; assign models when expanding this slice.
 The lead reviews bounds and uncertainty before acceptance.
 
 Broader cross-component recovery follows in slice 5.

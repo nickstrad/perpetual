@@ -7,13 +7,16 @@ Its central principle is understandable, maintainable engineering over clevernes
 Read [TESTING.md](TESTING.md) before designing tests or changing tested behavior.
 Follow [Go TigerStyle](docs/TIGERSTYLE.md) for implementation and invariant handling.
 Read [simulation research](docs/TEST_RESEARCH.md) before changing coordination or simulated boundaries.
-Follow the [MVP breakdown](plans/mvp/breakdown/README.md).
+Follow the [MVP breakdown](docs/plans/README.md).
 Expand only the current slice after discussing its boundaries and acceptance evidence.
-Use [v1.5](plans/1-mvp/v1.5.md) for detailed reference, not the active implementation sequence.
+Use the [current slice design](docs/plans/durable_requests/plan.md) for detailed contracts.
+Superseded plan revisions remain in Git history.
 
-Astra owns testing and maintains `TESTING.md` throughout implementation.
+The assigned test owner maintains testing and `TESTING.md` throughout implementation.
 Production owners supply behavior contracts and collaborate on necessary testability refactors.
 The lead assistant performs final review, validates evidence, updates plans, and handles commits.
+Use the [detailed-design skill](.agents/skills/detailed-design/SKILL.md) for detailed designs and TDD delegation.
+Keep model-selection policy in that skill and explicit model assignments in individual plans; general guides describe roles.
 Keep testing documentation and relevant code changes together in commits.
 Never describe planned checks as implemented or report unexecuted tests as passing.
 
@@ -26,6 +29,9 @@ Start it with the goal, scope, and owner of that work.
 Append dated activity while working; never rewrite earlier entries.
 Record decisions, changed behavior, checks actually run, unresolved risks, and the next step.
 Never reuse one file across separate chunks of work; start a fresh file.
+Each detailed plan also has a lead-owned `.state/<plan-slug>/plan_state.md` ledger, linked from the plan.
+It tracks all active tasks and their evidence across workers and tools; append snapshots without rewriting history.
+Workers keep their own work files and report changes to the lead instead of concurrently editing the plan ledger.
 Check `.state/` before starting; never edit or delete another set of work's file.
 
 Finished state files may stay until someone cleans them up.
