@@ -8,7 +8,9 @@ fixture_logs="$(mktemp -d /tmp/perpetual-pg-logs.XXXXXX)"
 cleanup() {
   result=$?
   timeout 10s docker logs "$fixture_name" > "$fixture_logs/postgres.log" 2>&1 || true
-  if ! timeout 15s docker rm -f "$fixture_name" >/dev/null; then
+  # The pinned image declares /var/lib/postgresql as an anonymous volume.
+  # -v removes only anonymous volumes attached to this owned container.
+  if ! timeout 15s docker rm -fv "$fixture_name" >/dev/null; then
     echo "Fixture cleanup failed: $fixture_name; logs: $fixture_logs" >&2
     result=1
   fi

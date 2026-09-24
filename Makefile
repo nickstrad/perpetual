@@ -12,13 +12,14 @@ build: check-go
 
 include scripts/dev.mk
 
-.PHONY: help test-fast test-sim test-integration test test-race vet coverage test-fuzz
+.PHONY: help test-fast test-sim test-integration test-fixture-cleanup test test-race vet coverage test-fuzz
 
 help:
 	@echo 'build             Build agent-plane and perpetual into bin/'
 	@echo 'test-fast         Unit, local HTTP, subprocess contracts and fuzz seeds (no PostgreSQL)'
 	@echo 'test-sim          Fixed scenarios, replay and invariant checks (no external services)'
 	@echo 'test-integration  Owned disposable Docker PostgreSQL and real service/CLI checks'
+	@echo 'test-fixture-cleanup  Verify owned containers/volumes are removed on success and failure'
 	@echo 'test              Complete fast, simulation and integration suites'
 	@echo 'test-race         Complete suite under Go race detector with real PostgreSQL'
 	@echo 'vet               Static diagnostics on production and tests'
@@ -35,7 +36,10 @@ test-fast:
 test-sim:
 	go test ./internal/registration -run '^TestSimulation|^TestTrace' -count=1 -timeout=30s
 
-test-integration:
+test-fixture-cleanup:
+	scripts/test-postgres-cleanup.sh
+
+test-integration: test-fixture-cleanup
 	scripts/test-postgres.sh go test -p 1 -tags=integration ./... -run '^(TestP[0-9]|TestProcess|TestFixture)' -count=1 -timeout=180s
 
 test: test-fast test-sim test-integration

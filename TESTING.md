@@ -213,7 +213,8 @@ fail explicitly; there are no successful placeholder checks.
 | `make build` | Build both actual binaries into `bin/` |
 | `make test-fast` | Unit/local HTTP/subprocess ownership/fatal cases and committed fuzz seeds; excludes PostgreSQL-tagged tests and fixed simulations |
 | `make test-sim` | S01–S10, lifecycle regressions, recorded replay, trace limits/metadata and invariant-failure trace capture; no database |
-| `make test-integration` | Owned disposable Docker PostgreSQL 18.6, P01–P11 and actual CLI/service process demonstration |
+| `make test-integration` | Fixture cleanup regression, owned disposable Docker PostgreSQL 18.6, P01–P11 and actual CLI/service process demonstration |
+| `make test-fixture-cleanup` | Verify exact owned container and anonymous data-volume removal after successful and intentionally failing child commands |
 | `make test` | Fast, simulation and real integration suites |
 | `make test-race` | Complete tagged suite under `-race` with its real owned PostgreSQL fixture |
 | `make vet` | Static diagnostics including integration test code |
@@ -227,6 +228,13 @@ belong in that package's `testdata/fuzz/` directory.
 
 `scripts/test-postgres.sh` creates an exclusively owned container and per-case
 databases. `scripts/versions.env` pins the official PostgreSQL 18.6 image digest.
+The image declares an anonymous data volume at `/var/lib/postgresql`; teardown
+uses `docker rm -fv` to remove that owned container and its attached anonymous
+volumes. It never prunes global dangling volumes. `make test-fixture-cleanup`
+captures the exact container/volume IDs while they exist, then verifies both are
+absent after child exit 0 and exit 23 while preserving those exit codes. Docker
+listing errors fail the check rather than masquerading as absence. This
+regression runs before `test-integration` and therefore in CI's `make test`.
 It prints server version/isolation/fsync/synchronous_commit/full_page_writes,
 waits on TCP readiness, binds a fixed loopback host port across restart and cleans
 up the container. P06 wraps the real pgx connection to suppress an observed
